@@ -3,11 +3,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Info } from 'lucide-react';
+import { useWalletUtils } from '@/hooks/useWalletUtils';
 
 type VaultAction = 'deposit' | 'borrow' | 'repay' | 'withdraw' | null;
 
 export function Vault() {
   const [activeAction, setActiveAction] = useState<VaultAction>(null);
+  const { account, formatAddress, isConnected } = useWalletUtils();
   const [actionAmount, setActionAmount] = useState('');
 
   const collateralRatio = 0; // percentage
@@ -189,7 +191,9 @@ export function Vault() {
 
               <div className="glass border-white/20 px-4 py-3 rounded-lg">
                 <p className="text-xs text-white/60 mb-1">Connected Wallet</p>
-                <p className="text-sm text-white/80 font-mono">mezo1x...7k9p</p>
+                <p className="text-sm text-white/80 font-mono">
+                  {isConnected && account ? formatAddress(account) : 'Not connected'}
+                </p>
               </div>
 
               <div className="glass border-white/20 px-4 py-3 rounded-lg">
