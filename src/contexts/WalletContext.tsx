@@ -1,28 +1,37 @@
 import { createContext, useContext, ReactNode } from 'react'
-import { useAccount, useBalance } from 'wagmi'
+import { useAccount, useConnect, useDisconnect } from 'wagmi'
 
 interface WalletContextType {
   address: string | undefined
   isConnected: boolean
   balance: string | undefined
   isLoading: boolean
+  connect: () => void
+  disconnect: () => void
 }
 
 const WalletContext = createContext<WalletContextType | undefined>(undefined)
 
 export function WalletProvider({ children }: { children: ReactNode }) {
   const { address, isConnected } = useAccount()
-  const { data: balance, isLoading } = useBalance({
-    address: address,
-  })
+  const { connect, connectors, isLoading } = useConnect()
+  const { disconnect } = useDisconnect()
+
+  const handleConnect = () => {
+    if (connectors[0]) {
+      connect({ connector: connectors[0] })
+    }
+  }
 
   return (
     <WalletContext.Provider
       value={{
         address,
         isConnected,
-        balance: balance?.formatted,
+        balance: undefined, // You can add balance fetching logic here
         isLoading,
+        connect: handleConnect,
+        disconnect,
       }}
     >
       {children}
