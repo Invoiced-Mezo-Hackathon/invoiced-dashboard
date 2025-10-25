@@ -1,26 +1,27 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import { RainbowKitProvider } from '@rainbow-me/rainbowkit'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { WagmiProvider } from 'wagmi'
-import { getConfig } from '@mezo-org/passport'
+import { mainnet, polygon, optimism, arbitrum, base } from 'wagmi/chains'
+import { RainbowKitProvider, getDefaultConfig } from '@rainbow-me/rainbowkit'
+import { QueryClientProvider, QueryClient } from '@tanstack/react-query'
 import { WalletProvider } from './contexts/WalletContext'
 import App from './App.tsx'
 import './index.css'
-import '@rainbow-me/rainbowkit/styles.css'
+
+// Configure RainbowKit
+const config = getDefaultConfig({
+  appName: 'Invoiced Dashboard',
+  projectId: '0978b2a5b70fad28244046b25a0a1f50',
+  chains: [mainnet, polygon, optimism, arbitrum, base],
+})
 
 const queryClient = new QueryClient()
 
-// Configure Mezo Passport for Mezo Testnet (Chain ID: 31611)
-const mezoConfig = getConfig({ 
-  appName: 'Invoiced Dashboard',
-})
-
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <WagmiProvider config={mezoConfig}>
+    <WagmiProvider config={config}>
       <QueryClientProvider client={queryClient}>
-        <RainbowKitProvider initialChain={31611}>
+        <RainbowKitProvider>
           <WalletProvider>
             <App />
           </WalletProvider>
