@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { WalletProvider } from '@/contexts/WalletContext';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { CreateInvoicePanel } from '@/components/invoice/CreateInvoicePanel';
 import { Dashboard } from '@/pages/Dashboard';
@@ -42,20 +43,22 @@ function App() {
   };
 
   return (
-    <div className="flex h-screen bg-background text-foreground overflow-hidden">
-      {/* Mobile: hide sidebar by default, show via menu button */}
-      <div className="hidden md:block">
-        <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
-      </div>
-      <div className="flex-1 flex flex-col md:flex-row overflow-hidden relative">
-        <div className="flex-1">
-          {renderContent()}
+    <WalletProvider>
+      <div className="flex h-screen bg-background text-foreground overflow-hidden">
+        {/* Mobile: hide sidebar by default, show via menu button */}
+        <div className="hidden md:block">
+          <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
         </div>
-        <CreateInvoicePanel 
-          onInvoiceCreated={handleInvoiceCreated} 
-        />
+        <div className="flex-1 flex flex-col md:flex-row overflow-hidden relative">
+          <div className="flex-1">
+            {renderContent()}
+          </div>
+          <CreateInvoicePanel 
+            onInvoiceCreated={handleInvoiceCreated} 
+          />
+        </div>
       </div>
-    </div>
+    </WalletProvider>
   );
 }
 

@@ -5,12 +5,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
+import { useWalletUtils } from '@/hooks/useWalletUtils';
 
 export function Payments() {
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
   const [withdrawAmount, setWithdrawAmount] = useState('');
   const [viewMode, setViewMode] = useState<'list' | 'graph'>('list');
-  const connectedWallet = 'mezo1x...7k9p';
+  const { account, formatAddress, isConnected } = useWalletUtils();
 
   const payments: Array<{
     id: string;
@@ -253,7 +254,7 @@ export function Payments() {
                 <Label className="text-sm text-white/70 mb-2 block">Connected Wallet</Label>
                 <div className="glass border-white/20 px-4 py-3 rounded-lg text-white/80 text-sm flex items-center gap-2">
                   <div className="w-2 h-2 rounded-full bg-green-400"></div>
-                  {connectedWallet}
+                  {isConnected && account ? formatAddress(account) : 'Not connected'}
                 </div>
               </div>
 
