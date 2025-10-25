@@ -7,7 +7,19 @@ import { Invoices } from '@/pages/Invoices';
 import { Payments } from '@/pages/Payments';
 import { Vault } from '@/pages/Vault';
 import { Settings } from '@/pages/Settings';
-import { Invoice } from '@/types/invoice';
+
+interface Invoice {
+  id: string;
+  clientName: string;
+  clientCode: string;
+  details: string;
+  amount: number;
+  currency: string;
+  musdAmount: number;
+  status: 'pending' | 'paid' | 'cancelled';
+  createdAt: string;
+  wallet: string;
+}
 
 function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -30,7 +42,7 @@ function App() {
       case 'dashboard':
         return <Dashboard onNavigate={setActiveTab} />;
       case 'invoices':
-        return <Invoices invoices={invoices} onUpdateInvoice={handleUpdateInvoice} />;
+        return <Invoices invoices={invoices} onUpdateInvoice={handleUpdateInvoice} />;                                                                          
       case 'payments':
         return <Payments />;
       case 'vault':
@@ -44,12 +56,12 @@ function App() {
 
   return (
     <WalletProvider>
-      <div className="flex h-screen bg-background text-foreground overflow-hidden">
+      <div className="flex h-screen bg-background text-foreground overflow-hidden">                                                                             
         {/* Mobile: hide sidebar by default, show via menu button */}
         <div className="hidden md:block">
           <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
         </div>
-        <div className="flex-1 flex flex-col md:flex-row overflow-hidden relative">
+        <div className="flex-1 flex flex-col md:flex-row overflow-hidden relative">                                                                             
           <div className="flex-1">
             {renderContent()}
           </div>

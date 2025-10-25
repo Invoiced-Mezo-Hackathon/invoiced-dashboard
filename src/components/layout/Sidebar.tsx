@@ -1,6 +1,5 @@
 import { Home, FileText, CreditCard, Vault, Settings } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { MezoConnect } from '../MezoConnect';
 
 interface SidebarProps {
   activeTab: string;
@@ -67,7 +66,7 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
       {/* Wallet Connection Section */}
       <div className="p-4 sm:p-5 lg:p-6 border-t border-border">
         <div className="glass p-4 sm:p-5 rounded-xl sm:rounded-2xl">
-          <MezoConnect />
+          <p className="text-sm text-foreground/70">Connect your wallet to get started</p>
         </div>
       </div>
     </aside>
