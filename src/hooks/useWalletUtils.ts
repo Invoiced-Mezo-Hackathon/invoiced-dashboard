@@ -1,23 +1,25 @@
-import { useWallet } from '@/contexts/WalletContext';
+import { useAccount } from 'wagmi';
 
 export const useWalletUtils = () => {
-  const { account, chainId } = useWallet();
+  const { address, chainId, isConnected } = useAccount();
 
   const formatAddress = (address: string, length: number = 6) => {
     if (!address) return '';
     return `${address.slice(0, length)}...${address.slice(-4)}`;
   };
 
-  const getExplorerUrl = (address: string, chainId?: string) => {
+  const getExplorerUrl = (address: string, chainId?: number) => {
     if (!address) return '';
     
     switch (chainId) {
-      case '0x1':
+      case 1:
         return `https://etherscan.io/address/${address}`;
-      case '0x89':
+      case 137:
         return `https://polygonscan.com/address/${address}`;
-      case '0x38':
+      case 56:
         return `https://bscscan.com/address/${address}`;
+      case 31611: // Mezo Testnet
+        return `https://explorer.test.mezo.org/address/${address}`;
       default:
         return `https://etherscan.io/address/${address}`;
     }
@@ -33,12 +35,33 @@ export const useWalletUtils = () => {
     }
   };
 
+  const isMezoTestnet = (chainId?: number) => {
+    return chainId === 31611;
+  };
+
+  const getNetworkName = (chainId?: number) => {
+    switch (chainId) {
+      case 1:
+        return 'Ethereum';
+      case 137:
+        return 'Polygon';
+      case 56:
+        return 'BSC';
+      case 31611:
+        return 'Mezo Testnet';
+      default:
+        return 'Unknown Network';
+    }
+  };
+
   return {
     formatAddress,
     getExplorerUrl,
     copyToClipboard,
-    isConnected: !!account,
-    account,
+    isConnected,
+    address,
     chainId,
+    isMezoTestnet,
+    getNetworkName,
   };
 };

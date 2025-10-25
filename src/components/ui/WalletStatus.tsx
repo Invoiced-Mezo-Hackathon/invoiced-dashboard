@@ -1,35 +1,29 @@
-import { useWallet } from '@/contexts/WalletContext';
-import { AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
+import { useAccount } from 'wagmi';
+import { ConnectButton } from '@rainbow-me/rainbowkit';
+import { NetworkSwitch } from './NetworkSwitch';
+import { useWalletUtils } from '@/hooks/useWalletUtils';
 
-export const WalletStatus = () => {
-  const { isConnected, isLoading, error } = useWallet();
+interface WalletStatusProps {
+  onShowNetworkModal?: () => void;
+}
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center gap-2 text-yellow-400">
-        <Loader2 className="w-4 h-4 animate-spin" />
-        <span className="text-sm">Connecting...</span>
-      </div>
-    );
-  }
+export const WalletStatus = ({ onShowNetworkModal }: WalletStatusProps) => {
+  const { isConnected } = useAccount();
+  const { isMezoTestnet, chainId } = useWalletUtils();
 
-  if (error) {
-    return (
-      <div className="flex items-center gap-2 text-red-400">
-        <AlertCircle className="w-4 h-4" />
-        <span className="text-sm">{error}</span>
-      </div>
-    );
-  }
-
-  if (isConnected) {
-    return (
-      <div className="flex items-center gap-2 text-green-400">
-        <CheckCircle className="w-4 h-4" />
-        <span className="text-sm">Connected</span>
-      </div>
-    );
-  }
-
-  return null;
+  return (
+    <div className="flex items-center gap-4">
+      {isConnected && (
+        <div className="flex items-center gap-2">
+          <NetworkSwitch onShowModal={onShowNetworkModal} />
+          {!isMezoTestnet(chainId) && (
+            <div className="text-xs text-amber-600 bg-amber-50 px-2 py-1 rounded border border-amber-200">
+              Switch to Mezo Testnet for full functionality
+            </div>
+          )}
+        </div>
+      )}
+      <ConnectButton />
+    </div>
+  );
 };

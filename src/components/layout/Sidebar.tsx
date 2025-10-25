@@ -1,11 +1,11 @@
 import { Home, FileText, CreditCard, Vault, Settings } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useWallet } from '@/contexts/WalletContext';
-import { ConnectButton } from '@rainbow-me/rainbowkit';
+import { WalletStatus } from '@/components/ui/WalletStatus';
 
 interface SidebarProps {
   activeTab: string;
   onTabChange: (tab: string) => void;
+  onShowNetworkModal?: () => void;
 }
 
 const navItems = [
@@ -16,8 +16,7 @@ const navItems = [
   { id: 'settings', icon: Settings, label: 'Settings' },
 ];
 
-export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
-  const { isConnected, connect, disconnect, address } = useWallet();
+export function Sidebar({ activeTab, onTabChange, onShowNetworkModal }: SidebarProps) {
 
   return (
     <aside className="w-60 sm:w-72 lg:w-80 glass h-screen flex flex-col border-r border-border shrink-0">
@@ -70,17 +69,7 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
       {/* Wallet Connection Section */}
       <div className="p-4 sm:p-5 lg:p-6 border-t border-border">
         <div className="glass p-4 sm:p-5 rounded-xl sm:rounded-2xl">
-          <ConnectButton 
-            chainStatus="icon"
-            accountStatus={{
-              smallScreen: 'avatar',
-              largeScreen: 'full',
-            }}
-            showBalance={{
-              smallScreen: false,
-              largeScreen: true,
-            }}
-          />
+          <WalletStatus onShowNetworkModal={onShowNetworkModal} />
         </div>
       </div>
     </aside>
