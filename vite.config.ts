@@ -17,5 +17,30 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: true,
+    target: 'esnext',
+    rollupOptions: {
+      external: (id) => {
+        // Don't bundle problematic modules
+        if (id.includes('@base-org/account')) return true
+        if (id.includes('@safe-globalThis/')) return true
+        return false
+      }
+    }
+  },
+  optimizeDeps: {
+    include: [
+      'sats-connect', 
+      '@mezo-org/passport',
+      '@rainbow-me/rainbowkit',
+      'wagmi',
+      'viem'
+    ],
+    exclude: ['@base-org/account', '@safe-globalThis/safe-apps-sdk', '@safe-globalThis/safe-apps-provider']
+  },
+  define: {
+    global: 'globalThis',
+  },
+  esbuild: {
+    target: 'esnext',
   },
 })

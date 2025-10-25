@@ -12,13 +12,25 @@ export function Payments() {
   const [viewMode, setViewMode] = useState<'list' | 'graph'>('list');
   const connectedWallet = 'mezo1x...7k9p';
 
-  const payments: any[] = [];
+  const payments: Array<{
+    id: string;
+    type: 'received' | 'sent';
+    counterparty: string;
+    amount: number;
+    date: string;
+    status: string;
+  }> = [];
 
   const totalReceived = 0;
   const totalSent = 0;
 
   // Empty chart data
-  const chartData: any[] = [];
+  const chartData: Array<{
+    day: string;
+    balance: number;
+    received: number;
+    sent: number;
+  }> = [];
 
   const handleWithdraw = () => {
     // Simulate withdrawal

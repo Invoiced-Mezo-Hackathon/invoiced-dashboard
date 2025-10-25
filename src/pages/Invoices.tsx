@@ -1,21 +1,9 @@
 import { useState } from 'react';
-import { X, CheckCircle, XCircle, QrCode, Share2 } from 'lucide-react';
+import { X, CheckCircle, XCircle, QrCode } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { InvoiceQRModal } from '@/components/invoice/InvoiceQRModal';
-
-interface Invoice {
-  id: string;
-  clientName: string;
-  clientCode: string;
-  details: string;
-  amount: number;
-  currency: string;
-  musdAmount: number;
-  status: 'pending' | 'paid' | 'cancelled';
-  createdAt: string;
-  wallet: string;
-}
+import { Invoice } from '@/types/invoice';
 
 interface InvoicesProps {
   invoices: Invoice[];
@@ -58,7 +46,7 @@ export function Invoices({ invoices, onUpdateInvoice }: InvoicesProps) {
         {invoices.map((invoice) => (
           <div
             key={invoice.id}
-            className="glass glass-hover p-6 rounded-3xl border border-white/10 hover:border-white/15 transition-all group"
+            className="glass-card p-6 rounded-3xl hover:scale-[1.02] transition-all group"
           >
             <div className="flex items-start justify-between mb-4">
               <div className="flex-1">
@@ -116,10 +104,15 @@ export function Invoices({ invoices, onUpdateInvoice }: InvoicesProps) {
         ))}
 
         {invoices.length === 0 && (
-          <div className="glass p-16 rounded-3xl text-center border border-white/10">
-            <p className="text-5xl mb-4">📭</p>
-            <p className="text-white/60 text-lg">No invoices yet</p>
-            <p className="text-white/40 text-sm mt-2">Use the Create Invoice panel to get started</p>
+          <div className="glass-card p-16 rounded-3xl text-center">
+            <div className="w-20 h-20 rounded-full bg-gradient-to-r from-blue-500/20 to-purple-500/20 flex items-center justify-center mx-auto mb-6">
+              <p className="text-4xl">📝</p>
+            </div>
+            <h3 className="text-xl font-semibold mb-2 font-title">No invoices yet</h3>
+            <p className="text-foreground/60 text-sm mb-6">Create your first invoice to get started with managing your business</p>
+            <button className="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-xl font-medium hover:from-blue-600 hover:to-purple-700 transition-all duration-300">
+              Create Invoice
+            </button>
           </div>
         )}
       </div>
