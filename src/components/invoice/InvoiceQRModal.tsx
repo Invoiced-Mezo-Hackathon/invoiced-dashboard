@@ -1,21 +1,9 @@
 import { useState, useEffect } from 'react';
-import { X, Copy, Share2, Download } from 'lucide-react';
+import { X, Copy, Download } from 'lucide-react';
 import QRCode from 'qrcode';
 import { cn } from '@/lib/utils';
 import toast from 'react-hot-toast';
-
-interface Invoice {
-  id: string;
-  clientName: string;
-  clientCode: string;
-  details: string;
-  amount: number;
-  currency: string;
-  musdAmount: number;
-  status: 'pending' | 'paid' | 'cancelled';
-  createdAt: string;
-  wallet: string;
-}
+import { Invoice } from '@/types/invoice';
 
 interface InvoiceQRModalProps {
   invoice: Invoice | null;
@@ -60,7 +48,7 @@ export function InvoiceQRModal({ invoice, isOpen, onClose }: InvoiceQRModalProps
     try {
       await navigator.clipboard.writeText(shareUrl);
       toast.success('Invoice link copied to clipboard!');
-    } catch (err) {
+    } catch {
       toast.error('Failed to copy link');
     }
   };

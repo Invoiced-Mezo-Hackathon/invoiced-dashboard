@@ -1,5 +1,6 @@
-import { Home, FileText, CreditCard, Vault, Settings, Wallet } from 'lucide-react';
+import { Home, FileText, CreditCard, Vault, Settings } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { MezoConnect } from '../MezoConnect';
 
 interface SidebarProps {
   activeTab: string;
@@ -63,18 +64,10 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
         ))}
       </nav>
 
-      {/* User Section */}
+      {/* Wallet Connection Section */}
       <div className="p-4 sm:p-5 lg:p-6 border-t border-border">
-        <div className="glass p-4 sm:p-5 rounded-xl sm:rounded-2xl backdrop-blur-xl bg-yellow-400 border border-yellow-400 shadow-lg hover:shadow-xl transition-all duration-300 hover:bg-gray-500">
-          <div className="flex items-center gap-2 sm:gap-3">
-            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full glass flex items-center justify-center text-xs sm:text-sm font-semibold shrink-0 backdrop-blur-sm bg-white/20 border border-white/30 shadow-inner">
-              <Wallet className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs sm:text-sm font-medium truncate text-white">User</p>
-              <p className="text-[10px] sm:text-xs text-white truncate">Connect Wallet</p>
-            </div>
-          </div>
+        <div className="glass p-4 sm:p-5 rounded-xl sm:rounded-2xl">
+          <MezoConnect />
         </div>
       </div>
     </aside>

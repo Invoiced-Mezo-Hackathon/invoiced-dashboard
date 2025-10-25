@@ -1,21 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { Send, Plus, X } from 'lucide-react';
-import { cn } from '@/lib/utils';
 import toast from 'react-hot-toast';
 import { InvoiceQRModal } from './InvoiceQRModal';
-
-interface Invoice {
-  id: string;
-  clientName: string;
-  clientCode: string;
-  details: string;
-  amount: number;
-  currency: 'USD' | 'KES';
-  musdAmount: number;
-  status: 'pending' | 'paid' | 'overdue';
-  createdAt: string;
-  wallet: string;
-}
+import { Invoice } from '@/types/invoice';
 
 interface CreateInvoicePanelProps {
   onInvoiceCreated: (invoice: Invoice) => void;
