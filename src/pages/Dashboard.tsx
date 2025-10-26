@@ -1,39 +1,68 @@
 import { TrendingUp, Clock, Vault, Activity, DollarSign, Users, FileText, CreditCard } from 'lucide-react';
 
-interface DashboardProps {
-  onNavigate: (tab: string) => void;
+interface Invoice {
+  id: string;
+  clientName: string;
+  clientCode: string;
+  details: string;
+  amount: number;
+  currency: string;
+  musdAmount: number;
+  status: 'pending' | 'paid' | 'cancelled';
+  createdAt: string;
+  wallet: string;
+  bitcoinAddress?: string;
 }
 
-export function Dashboard({ onNavigate }: DashboardProps) {
-  const stats = [
+interface DashboardProps {
+  onNavigate: (tab: string) => void;
+  invoices: Invoice[];
+}
+
+export function Dashboard({ onNavigate, invoices }: DashboardProps) {
+  // Calculate stats from invoices
+  const totalRevenue = invoices
+    .filter(invoice => invoice.status === 'paid')
+    .reduce((sum, invoice) => sum + invoice.amount, 0);
+  
+  const activeInvoices = invoices.filter(invoice => invoice.status === 'pending').length;
+  const totalInvoices = invoices.length;
+  const pendingAmount = invoices
+    .filter(invoice => invoice.status === 'pending')
+    .reduce((sum, invoice) => sum + invoice.amount, 0);
+
+  // Get recent invoices (last 5)
+  const recentInvoices = invoices.slice(0, 5);
+
+  const statsData = [
     {
       label: 'Total Revenue',
-      value: '$12,450',
-      change: '+12.5%',
+      value: `$${totalRevenue.toFixed(2)}`,
+      change: totalRevenue > 0 ? '+12.5%' : '0%',
       icon: DollarSign,
       color: 'text-green-400',
       bgColor: 'bg-green-500/10',
     },
     {
       label: 'Active Invoices',
-      value: '24',
-      change: '+3',
+      value: activeInvoices.toString(),
+      change: activeInvoices > 0 ? `+${activeInvoices}` : '0',
       icon: FileText,
       color: 'text-blue-400',
       bgColor: 'bg-blue-500/10',
     },
     {
-      label: 'Total Clients',
-      value: '156',
-      change: '+8',
+      label: 'Total Invoices',
+      value: totalInvoices.toString(),
+      change: totalInvoices > 0 ? `+${totalInvoices}` : '0',
       icon: Users,
       color: 'text-purple-400',
       bgColor: 'bg-purple-500/10',
     },
     {
       label: 'Pending Payments',
-      value: '$3,240',
-      change: '-2.1%',
+      value: `$${pendingAmount.toFixed(2)}`,
+      change: pendingAmount > 0 ? '-2.1%' : '0%',
       icon: CreditCard,
       color: 'text-orange-400',
       bgColor: 'bg-orange-500/10',
@@ -43,7 +72,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
   const quickActions = [
     {
       label: 'Create Invoice',
-      description: 'Generate professional invoices with automatic codes and MUSD conversion',
+      description: 'Generate professional invoices with Bitcoin payment addresses',
       icon: TrendingUp,
       tab: 'invoices',
       emoji: '📝',
@@ -103,13 +132,13 @@ export function Dashboard({ onNavigate }: DashboardProps) {
         <div className="mb-8">
           <h2 className="text-xl font-semibold mb-6 font-title">Business Overview</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {stats.map((stat) => (
+            {statsData.map((stat) => (
               <div key={stat.label} className="glass-card p-6 rounded-2xl">
                 <div className="flex items-center justify-between mb-4">
                   <div className={`p-3 rounded-xl ${stat.bgColor}`}>
                     <stat.icon className={`w-6 h-6 ${stat.color}`} />
                   </div>
-                  <span className={`text-sm font-medium ${stat.change.startsWith('+') ? 'text-green-400' : 'text-red-400'}`}>
+                  <span className={`text-sm font-medium ${stat.change.startsWith('+') ? 'text-green-400' : stat.change.startsWith('-') ? 'text-red-400' : 'text-gray-400'}`}>
                     {stat.change}
                   </span>
                 </div>
@@ -152,19 +181,64 @@ export function Dashboard({ onNavigate }: DashboardProps) {
         {/* Recent Activity */}
         <div className="glass-card p-6 rounded-2xl">
           <h2 className="text-xl font-semibold mb-6 font-title">Recent Activity</h2>
-          <div className="flex flex-col items-center justify-center py-16 text-center">
-            <div className="w-20 h-20 rounded-full bg-gradient-to-r from-blue-500/20 to-purple-500/20 flex items-center justify-center mb-6">
-              <div className="text-4xl">📊</div>
+          {recentInvoices.length > 0 ? (
+            <div className="space-y-4">
+              {recentInvoices.map((invoice) => (
+                <div key={invoice.id} className="flex items-center justify-between p-4 rounded-xl bg-white/5 border border-white/10">
+                  <div className="flex items-center gap-4">
+                    <div className={`p-2 rounded-lg ${
+                      invoice.status === 'paid' ? 'bg-green-500/10' : 
+                      invoice.status === 'pending' ? 'bg-yellow-500/10' : 
+                      'bg-red-500/10'
+                    }`}>
+                      <FileText className={`w-5 h-5 ${
+                        invoice.status === 'paid' ? 'text-green-400' : 
+                        invoice.status === 'pending' ? 'text-yellow-400' : 
+                        'text-red-400'
+                      }`} />
+                    </div>
+                    <div>
+                      <p className="font-medium">{invoice.clientName}</p>
+                      <p className="text-sm text-white/50">{new Date(invoice.createdAt).toLocaleDateString()}</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-semibold">{invoice.amount.toFixed(8)} BTC</p>
+                    <p className="text-xs text-white/60">${invoice.musdAmount.toFixed(2)}</p>
+                    <span className={`text-xs px-2 py-1 rounded-full ${
+                      invoice.status === 'paid' ? 'bg-green-500/20 text-green-400' :
+                      invoice.status === 'pending' ? 'bg-yellow-500/20 text-yellow-400' :
+                      'bg-red-500/20 text-red-400'
+                    }`}>
+                      {invoice.status}
+                    </span>
+                  </div>
+                </div>
+              ))}
+              <div className="text-center pt-4">
+                <button
+                  onClick={() => onNavigate('invoices')}
+                  className="text-orange-400 hover:text-orange-300 text-sm font-medium"
+                >
+                  View All Invoices →
+                </button>
+              </div>
             </div>
-            <h3 className="text-lg font-semibold mb-2 font-title">No activity yet</h3>
-            <p className="text-foreground/60 text-sm mb-4">Start by creating your first invoice to see activity here</p>
-            <button
-              onClick={() => onNavigate('invoices')}
-              className="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-xl font-medium hover:from-blue-600 hover:to-purple-700 transition-all duration-300"
-            >
-              Create Invoice
-            </button>
-          </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <div className="w-20 h-20 rounded-full bg-gradient-to-r from-blue-500/20 to-purple-500/20 flex items-center justify-center mb-6">
+                <div className="text-4xl">📊</div>
+              </div>
+              <h3 className="text-lg font-semibold mb-2 font-title">No activity yet</h3>
+              <p className="text-foreground/60 text-sm mb-4">Start by creating your first invoice to see activity here</p>
+              <button
+                onClick={() => onNavigate('invoices')}
+                className="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-xl font-medium hover:from-blue-600 hover:to-purple-700 transition-all duration-300"
+              >
+                Create Invoice
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>

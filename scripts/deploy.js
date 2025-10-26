@@ -1,15 +1,15 @@
-const hre = require("hardhat");
+const { ethers } = require("hardhat");
 
 async function main() {
   console.log("🚀 Deploying contracts to Mezo testnet...");
   
   // Get the deployer account
-  const [deployer] = await hre.ethers.getSigners();
+  const [deployer] = await ethers.getSigners();
   console.log("Deploying contracts with account:", deployer.address);
   
   // Check balance
-  const balance = await hre.ethers.provider.getBalance(deployer.address);
-  console.log("Account balance:", hre.ethers.formatEther(balance), "BTC");
+  const balance = await ethers.provider.getBalance(deployer.address);
+  console.log("Account balance:", ethers.formatEther(balance), "BTC");
   
   if (balance === 0n) {
     console.log("❌ No balance found! Please get testnet BTC from the faucet:");
@@ -19,7 +19,7 @@ async function main() {
 
   // Deploy InvoiceContract
   console.log("\n📄 Deploying InvoiceContract...");
-  const InvoiceContract = await hre.ethers.getContractFactory("InvoiceContract");
+  const InvoiceContract = await ethers.getContractFactory("InvoiceContract");
   const invoiceContract = await InvoiceContract.deploy();
   
   await invoiceContract.waitForDeployment();
@@ -28,7 +28,7 @@ async function main() {
 
   // Deploy MezoVaultContract (our custom vault contract)
   console.log("\n🏦 Deploying MezoVaultContract...");
-  const MezoVaultContract = await hre.ethers.getContractFactory("MezoVaultContract");
+  const MezoVaultContract = await ethers.getContractFactory("MezoVaultContract");
   const vaultContract = await MezoVaultContract.deploy();
   
   await vaultContract.waitForDeployment();

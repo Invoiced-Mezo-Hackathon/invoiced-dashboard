@@ -27,6 +27,7 @@ export const MEZO_CONTRACTS = {
   STABILITY_POOL: '0x1234567890123456789012345678901234567890', // Placeholder - will be updated after deployment
   TROVE_MANAGER: '0x1234567890123456789012345678901234567890', // Placeholder - will be updated after deployment
   MEZO_VAULT: '0x1234567890123456789012345678901234567890', // Our custom vault contract - will be updated after deployment
+  INVOICE_CONTRACT: '0x1234567890123456789012345678901234567890', // Invoice contract - placeholder address
 };
 
 // Contract ABIs for Mezo integration
@@ -63,6 +64,25 @@ export const BORROW_MANAGER_ABI = [
   "event MUSDBorrowed(address indexed user, uint256 amount)",
   "event MUSDRepaid(address indexed user, uint256 amount)",
   "event CollateralWithdrawn(address indexed user, uint256 amount)",
+] as const;
+
+export const INVOICE_CONTRACT_ABI = [
+  // Invoice management functions
+  "function createInvoice(address _recipient, uint256 _amount, string memory _description, string memory _bitcoinAddress, string memory _clientName, string memory _clientCode) returns (uint256)",
+  "function confirmPayment(uint256 _id)",
+  "function cancelInvoice(uint256 _id)",
+  // View functions
+  "function getInvoice(uint256 _id) view returns (tuple(uint256 id, address creator, address recipient, uint256 amount, string description, string bitcoinAddress, string clientName, string clientCode, bool paid, bool cancelled, uint256 createdAt, uint256 paidAt))",
+  "function getUserInvoices(address _user) view returns (uint256[])",
+  "function getPaidInvoices(address _user) view returns (uint256[])",
+  "function getPendingInvoices(address _user) view returns (uint256[])",
+  "function getTotalRevenue(address _user) view returns (uint256)",
+  "function getPendingAmount(address _user) view returns (uint256)",
+  "function getUserInvoiceCount(address _user) view returns (uint256)",
+  // Events
+  "event InvoiceCreated(uint256 indexed id, address indexed creator, address indexed recipient, uint256 amount, string bitcoinAddress, string clientName)",
+  "event InvoicePaid(uint256 indexed id, uint256 amount, uint256 timestamp)",
+  "event InvoiceCancelled(uint256 indexed id, uint256 timestamp)",
 ] as const;
 
 // Utility functions for Mezo integration
