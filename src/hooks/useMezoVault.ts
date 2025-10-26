@@ -1,12 +1,33 @@
 import { useState, useEffect } from 'react';
-import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt, useBalance } from 'wagmi';
+import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt, useBalance, useSendTransaction } from 'wagmi';
 import { MEZO_CONTRACTS, MUSD_ABI, BORROW_MANAGER_ABI, MezoVault, MezoUtils, MezoError, MEZO_ERRORS } from '@/lib/mezo';
+import { paymentMonitor, PaymentEvent } from '@/services/payment-monitor';
 
 export const useMezoVault = () => {
   const { address, isConnected } = useAccount();
   const [vaultData, setVaultData] = useState<MezoVault | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Write contract hooks for vault operations
+  const { writeContract: depositCollateralWrite, data: depositHash } = useWriteContract();
+  const { writeContract: borrowMUSDWrite, data: borrowHash } = useWriteContract();
+  const { writeContract: repayMUSDWrite, data: repayHash } = useWriteContract();
+  const { writeContract: withdrawCollateralWrite, data: withdrawHash } = useWriteContract();
+
+  // Transaction confirmation hooks
+  const { isLoading: isDepositConfirming, isSuccess: isDepositSuccess } = useWaitForTransactionReceipt({
+    hash: depositHash,
+  });
+  const { isLoading: isBorrowConfirming, isSuccess: isBorrowSuccess } = useWaitForTransactionReceipt({
+    hash: borrowHash,
+  });
+  const { isLoading: isRepayConfirming, isSuccess: isRepaySuccess } = useWaitForTransactionReceipt({
+    hash: repayHash,
+  });
+  const { isLoading: isWithdrawConfirming, isSuccess: isWithdrawSuccess } = useWaitForTransactionReceipt({
+    hash: withdrawHash,
+  });
 
   // Get native Bitcoin balance from wallet
   const { data: nativeBalance } = useBalance({
@@ -18,7 +39,7 @@ export const useMezoVault = () => {
 
   // Read MUSD balance
   const { data: musdBalance, refetch: refetchMusdBalance } = useReadContract({
-    address: MEZO_CONTRACTS.MUSD_TOKEN,
+    address: MEZO_CONTRACTS.MUSD_TOKEN as `0x${string}`,
     abi: MUSD_ABI,
     functionName: 'balanceOf',
     args: address ? [address] : undefined,
@@ -28,8 +49,8 @@ export const useMezoVault = () => {
   });
 
   // Read collateral balance from our custom vault contract
-  const { data: collateralBalance, refetch: refetchCollateralBalance } = useReadContract({
-    address: MEZO_CONTRACTS.MEZO_VAULT,
+  const { refetch: refetchCollateralBalance } = useReadContract({
+    address: MEZO_CONTRACTS.MEZO_VAULT as `0x${string}`,
     abi: BORROW_MANAGER_ABI,
     functionName: 'getCollateralBalance',
     args: address ? [address] : undefined,
@@ -39,8 +60,8 @@ export const useMezoVault = () => {
   });
 
   // Read borrowed amount from our custom vault contract
-  const { data: borrowedAmount, refetch: refetchBorrowedAmount } = useReadContract({
-    address: MEZO_CONTRACTS.MEZO_VAULT,
+  const { refetch: refetchBorrowedAmount } = useReadContract({
+    address: MEZO_CONTRACTS.MEZO_VAULT as `0x${string}`,
     abi: BORROW_MANAGER_ABI,
     functionName: 'getBorrowedAmount',
     args: address ? [address] : undefined,
@@ -50,8 +71,8 @@ export const useMezoVault = () => {
   });
 
   // Read collateral ratio from our custom vault contract
-  const { data: collateralRatio, refetch: refetchCollateralRatio } = useReadContract({
-    address: MEZO_CONTRACTS.MEZO_VAULT,
+  const { refetch: refetchCollateralRatio } = useReadContract({
+    address: MEZO_CONTRACTS.MEZO_VAULT as `0x${string}`,
     abi: BORROW_MANAGER_ABI,
     functionName: 'getCollateralRatio',
     args: address ? [address] : undefined,
@@ -60,23 +81,6 @@ export const useMezoVault = () => {
     },
   });
 
-  // Read interest rate from our custom vault contract
-  const { data: interestRate } = useReadContract({
-    address: MEZO_CONTRACTS.MEZO_VAULT,
-    abi: BORROW_MANAGER_ABI,
-    functionName: 'getInterestRate',
-    query: {
-      enabled: !!address && isConnected,
-    },
-  });
-
-  // Write contract for vault operations
-  const { writeContract, data: hash, isPending, error: writeError } = useWriteContract();
-
-  // Wait for transaction confirmation
-  const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
-    hash,
-  });
 
   // Update vault data when native balance changes
   useEffect(() => {
@@ -102,6 +106,9 @@ export const useMezoVault = () => {
     try {
       await Promise.all([
         refetchMusdBalance(),
+        refetchCollateralBalance(),
+        refetchBorrowedAmount(),
+        refetchCollateralRatio(),
         // Note: Native balance will automatically refresh when wallet state changes
         // Contract balances will be added when we integrate with official Mezo system
       ]);
@@ -120,19 +127,18 @@ export const useMezoVault = () => {
       setIsLoading(true);
       setError(null);
 
-      // For now, this is a placeholder that shows the user's intent
-      // Once we integrate with official Mezo borrowing system, this will call the real contracts
-      console.log('Depositing collateral:', amount, 'BTC');
+      // Convert amount to wei
+      const amountInWei = MezoUtils.parseAmount(amount);
       
-      // TODO: Integrate with official Mezo borrowing contracts
-      // This will call the official Mezo borrowing system to deposit BTC as collateral
-      
-      // Simulate success for now
-      setTimeout(() => {
-        setIsLoading(false);
-        console.log('Collateral deposit simulated successfully');
-      }, 1000);
-      
+      // Call vault contract's depositCollateral function with ETH value
+      depositCollateralWrite({
+        address: MEZO_CONTRACTS.MEZO_VAULT as `0x${string}`,
+        abi: BORROW_MANAGER_ABI,
+        functionName: 'depositCollateral',
+        args: [amountInWei],
+        value: amountInWei
+      });
+
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Deposit failed';
       setError(errorMessage);
@@ -150,18 +156,16 @@ export const useMezoVault = () => {
       setIsLoading(true);
       setError(null);
 
-      // For now, this is a placeholder that shows the user's intent
-      // Once we integrate with official Mezo borrowing system, this will call the real contracts
-      console.log('Borrowing MUSD:', amount);
+      // Convert amount to wei
+      const amountInWei = MezoUtils.parseAmount(amount);
       
-      // TODO: Integrate with official Mezo borrowing contracts
-      // This will call the official Mezo borrowing system to mint MUSD against BTC collateral
-      
-      // Simulate success for now
-      setTimeout(() => {
-        setIsLoading(false);
-        console.log('MUSD borrowing simulated successfully');
-      }, 1000);
+      // Call vault contract's borrowMUSD function
+      borrowMUSDWrite({
+        address: MEZO_CONTRACTS.MEZO_VAULT as `0x${string}`,
+        abi: BORROW_MANAGER_ABI,
+        functionName: 'borrowMUSD',
+        args: [amountInWei]
+      });
       
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Borrow failed';
@@ -180,18 +184,16 @@ export const useMezoVault = () => {
       setIsLoading(true);
       setError(null);
 
-      // For now, this is a placeholder that shows the user's intent
-      // Once we integrate with official Mezo borrowing system, this will call the real contracts
-      console.log('Repaying MUSD:', amount);
+      // Convert amount to wei
+      const amountInWei = MezoUtils.parseAmount(amount);
       
-      // TODO: Integrate with official Mezo borrowing contracts
-      // This will call the official Mezo borrowing system to repay MUSD debt
-      
-      // Simulate success for now
-      setTimeout(() => {
-        setIsLoading(false);
-        console.log('MUSD repayment simulated successfully');
-      }, 1000);
+      // Call vault contract's repayMUSD function
+      repayMUSDWrite({
+        address: MEZO_CONTRACTS.MEZO_VAULT as `0x${string}`,
+        abi: BORROW_MANAGER_ABI,
+        functionName: 'repayMUSD',
+        args: [amountInWei]
+      });
       
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Repay failed';
@@ -210,18 +212,16 @@ export const useMezoVault = () => {
       setIsLoading(true);
       setError(null);
 
-      // For now, this is a placeholder that shows the user's intent
-      // Once we integrate with official Mezo borrowing system, this will call the real contracts
-      console.log('Withdrawing collateral:', amount, 'BTC');
+      // Convert amount to wei
+      const amountInWei = MezoUtils.parseAmount(amount);
       
-      // TODO: Integrate with official Mezo borrowing contracts
-      // This will call the official Mezo borrowing system to withdraw BTC collateral
-      
-      // Simulate success for now
-      setTimeout(() => {
-        setIsLoading(false);
-        console.log('Collateral withdrawal simulated successfully');
-      }, 1000);
+      // Call vault contract's withdrawCollateral function
+      withdrawCollateralWrite({
+        address: MEZO_CONTRACTS.MEZO_VAULT as `0x${string}`,
+        abi: BORROW_MANAGER_ABI,
+        functionName: 'withdrawCollateral',
+        args: [amountInWei]
+      });
       
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Withdrawal failed';
@@ -230,25 +230,76 @@ export const useMezoVault = () => {
     }
   };
 
+  // Send Bitcoin to external address
+  const { sendTransaction: sendBitcoinTx, data: sendBitcoinHash } = useSendTransaction();
+  
+  const sendBitcoin = async (recipientAddress: string, amount: string) => {
+    if (!address || !isConnected) {
+      throw new MezoError('Wallet not connected', MEZO_ERRORS.NETWORK_ERROR);
+    }
+
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      // Convert amount to wei
+      const amountInWei = MezoUtils.parseAmount(amount);
+      
+      // Send native BTC transfer
+      sendBitcoinTx({
+        to: recipientAddress as `0x${string}`,
+        value: amountInWei
+      });
+      
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Send failed';
+      setError(errorMessage);
+      throw new MezoError(errorMessage, MEZO_ERRORS.TRANSACTION_FAILED, err);
+    }
+  };
+
+  // Listen for payment events to refresh balance
+  useEffect(() => {
+    const handlePaymentReceived = (event: PaymentEvent) => {
+      if (event.type === 'payment_detected' || event.type === 'payment_confirmed') {
+        console.log('💰 Payment received, refreshing vault balance...');
+        // Refresh all vault data when payment is received
+        refetchAll();
+      }
+    };
+
+    // Set up payment monitor callbacks
+    paymentMonitor.setCallbacks({
+      onPaymentDetected: handlePaymentReceived,
+      onPaymentConfirmed: handlePaymentReceived,
+    });
+
+    return () => {
+      // Clean up callbacks
+      paymentMonitor.setCallbacks({});
+    };
+  }, [refetchAll]);
+
   // Refetch data after successful transaction
   useEffect(() => {
-    if (isSuccess) {
+    if (isDepositSuccess || isBorrowSuccess || isRepaySuccess || isWithdrawSuccess) {
       refetchAll();
+      setIsLoading(false);
     }
-  }, [isSuccess, refetchAll]);
+  }, [isDepositSuccess, isBorrowSuccess, isRepaySuccess, isWithdrawSuccess, refetchAll]);
 
   return {
     // Data
     vaultData,
     musdBalance: musdBalance ? MezoUtils.formatAmount(musdBalance as bigint) : '0',
-    collateralBalance: vaultData?.collateralAmount || '0', // Now shows native Bitcoin balance
+    collateralBalance: vaultData?.collateralAmount || '0',
     borrowedAmount: vaultData?.borrowedAmount || '0',
     collateralRatio: vaultData?.collateralRatio || 0,
     interestRate: vaultData?.interestRate || 0,
     healthFactor: vaultData?.healthFactor || 0,
     
     // State
-    isLoading: isLoading || isPending || isConfirming,
+    isLoading: isLoading || isDepositConfirming || isBorrowConfirming || isRepayConfirming || isWithdrawConfirming,
     error,
     isConnected,
     
@@ -257,12 +308,24 @@ export const useMezoVault = () => {
     borrowMUSD,
     repayMUSD,
     withdrawCollateral,
+    sendBitcoin,
     refetchAll,
     
     // Transaction status
-    isPending,
-    isConfirming,
-    isSuccess,
-    transactionHash: hash,
+    isPending: isDepositConfirming || isBorrowConfirming || isRepayConfirming || isWithdrawConfirming,
+    isConfirming: isDepositConfirming || isBorrowConfirming || isRepayConfirming || isWithdrawConfirming,
+    isSuccess: isDepositSuccess || isBorrowSuccess || isRepaySuccess || isWithdrawSuccess,
+    transactionHash: depositHash || borrowHash || repayHash || withdrawHash || sendBitcoinHash,
+    
+    // Individual transaction statuses
+    isDepositSuccess,
+    isBorrowSuccess,
+    isRepaySuccess,
+    isWithdrawSuccess,
+    depositHash,
+    borrowHash,
+    repayHash,
+    withdrawHash,
+    sendBitcoinHash,
   };
 };

@@ -1,292 +1,347 @@
-import { useState } from 'react';
-import { ArrowUpRight, ArrowDownLeft, BarChart3, List } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { ArrowUpRight, ArrowDownLeft, BarChart3, List, ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
-import { useWalletUtils } from '@/hooks/useWalletUtils';
+import { transactionStorage } from '@/services/transaction-storage';
+import { MEZO_EXPLORER_URL } from '@/lib/boar-config';
 
-export function Payments() {
+interface Invoice {
+  id: string;
+  clientName: string;
+  clientCode: string;
+  details: string;
+  amount: number;
+  currency: string;
+  musdAmount: number;
+  status: 'pending' | 'paid' | 'cancelled';
+  createdAt: string;
+  wallet: string;
+  bitcoinAddress?: string;
+}
+
+interface PaymentsProps {
+  invoices: Invoice[];
+}
+
+export function Payments({ invoices }: PaymentsProps) {
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
   const [withdrawAmount, setWithdrawAmount] = useState('');
   const [viewMode, setViewMode] = useState<'list' | 'graph'>('list');
-  const { account, formatAddress, isConnected } = useWalletUtils();
+  const [bitcoinPrice, setBitcoinPrice] = useState<number>(0);
 
-  const payments: Array<{
-    id: string;
-    type: 'received' | 'sent';
-    counterparty: string;
-    amount: number;
-    date: string;
-    status: string;
-  }> = [];
+  // Fetch real-time Bitcoin price
+  useEffect(() => {
+    const fetchBitcoinPrice = async () => {
+      try {
+        const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd');
+        const data = await response.json();
+        setBitcoinPrice(data.bitcoin.usd);
+      } catch (error) {
+        console.error('Error fetching Bitcoin price:', error);
+        setBitcoinPrice(65000); // Fallback price
+      }
+    };
 
-  const totalReceived = 0;
-  const totalSent = 0;
+    fetchBitcoinPrice();
+  }, []);
 
-  // Empty chart data
-  const chartData: Array<{
-    day: string;
-    balance: number;
-    received: number;
-    sent: number;
-  }> = [];
+  // Calculate payment history from invoices with transaction details
+  const paymentHistory = invoices
+    .filter(invoice => invoice.status === 'paid')
+    .map(invoice => {
+      // Get transaction details from storage
+      const transactions = transactionStorage.getTransactionsForInvoice(invoice.id);
+      const latestTransaction = transactions[0]; // Most recent transaction
+      
+      return {
+        id: invoice.id,
+        type: 'received' as const,
+        counterparty: invoice.clientName,
+        amount: invoice.amount,
+        date: invoice.paidAt || invoice.createdAt,
+        status: latestTransaction?.status || 'confirmed',
+        bitcoinAddress: invoice.bitcoinAddress,
+        // Enhanced transaction details
+        txHash: latestTransaction?.txHash || invoice.paymentTxHash,
+        blockNumber: latestTransaction?.blockNumber,
+        confirmations: latestTransaction?.confirmations,
+        from: latestTransaction?.from,
+        to: latestTransaction?.to,
+      };
+    });
+
+  const totalReceived = paymentHistory.reduce((sum, payment) => sum + payment.amount, 0);
+
+  // Generate chart data from payment history
+  const chartData = paymentHistory.reduce((acc, payment) => {
+    const date = new Date(payment.date).toLocaleDateString();
+    const existing = acc.find(item => item.day === date);
+    
+    if (existing) {
+      existing.balance += payment.amount;
+      existing.received += payment.amount;
+    } else {
+      acc.push({
+        day: date,
+        balance: payment.amount,
+        received: payment.amount,
+      });
+    }
+    
+    return acc;
+  }, [] as any[]).sort((a, b) => new Date(a.day).getTime() - new Date(b.day).getTime());
 
   const handleWithdraw = () => {
-    // Simulate withdrawal
-    console.log('Withdrawing:', withdrawAmount);
-    setWithdrawAmount('');
+    // Placeholder for withdraw functionality
+    console.log('Withdraw amount:', withdrawAmount);
     setShowWithdrawModal(false);
+    setWithdrawAmount('');
   };
 
   return (
     <div className="flex-1 h-screen overflow-y-auto p-8">
+      {/* Header */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-2 font-title">Payments</h1>
-        <p className="text-white/60">Track all your transactions</p>
+        <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold mb-2 font-title bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent">
+          Payments
+        </h1>
+        <p className="text-foreground/60 text-lg">Track your payment history and manage withdrawals</p>
       </div>
 
-      <div className="grid grid-cols-2 gap-6 mb-8">
-        <div className="glass p-6 rounded-2xl border border-white/10">
-          <div className="flex items-center gap-3 mb-4">
+      {/* Payment Summary */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+        <div className="glass-card p-6 rounded-2xl">
+          <div className="flex items-center justify-between mb-4">
             <div className="p-3 rounded-xl bg-green-500/10">
               <ArrowDownLeft className="w-6 h-6 text-green-400" />
             </div>
-            <div>
-              <p className="text-sm text-white/60">Total Received</p>
-              <p className="text-3xl font-bold">${totalReceived.toFixed(2)}</p>
-            </div>
+            <span className="text-sm font-medium text-green-400">+{paymentHistory.length}</span>
+          </div>
+          <div>
+            <p className="text-2xl font-bold mb-1">{totalReceived.toFixed(8)} BTC</p>
+            <p className="text-sm text-foreground/60">Total Received</p>
+            <p className="text-xs text-white/50">${(totalReceived * bitcoinPrice).toFixed(2)} USD</p>
           </div>
         </div>
 
-        <div className="glass p-6 rounded-2xl border border-white/10">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="p-3 rounded-xl bg-red-500/10">
-              <ArrowUpRight className="w-6 h-6 text-red-400" />
+        <div className="glass-card p-6 rounded-2xl">
+          <div className="flex items-center justify-between mb-4">
+            <div className="p-3 rounded-xl bg-blue-500/10">
+              <BarChart3 className="w-6 h-6 text-blue-400" />
             </div>
-            <div>
-              <p className="text-sm text-white/60">Total Sent</p>
-              <p className="text-3xl font-bold">${totalSent.toFixed(2)}</p>
+            <span className="text-sm font-medium text-blue-400">+12.5%</span>
+          </div>
+          <div>
+            <p className="text-2xl font-bold mb-1">{totalReceived.toFixed(8)} BTC</p>
+            <p className="text-sm text-foreground/60">Net Balance</p>
+            <p className="text-xs text-white/50">${(totalReceived * bitcoinPrice).toFixed(2)} USD</p>
+          </div>
+        </div>
+
+        <div className="glass-card p-6 rounded-2xl">
+          <div className="flex items-center justify-between mb-4">
+            <div className="p-3 rounded-xl bg-purple-500/10">
+              <ArrowDownLeft className="w-6 h-6 text-purple-400" />
             </div>
+            <span className="text-sm font-medium text-purple-400">+{paymentHistory.length}</span>
+          </div>
+          <div>
+            <p className="text-2xl font-bold mb-1">{paymentHistory.length}</p>
+            <p className="text-sm text-foreground/60">Transactions</p>
+            <p className="text-xs text-white/50">Paid invoices</p>
           </div>
         </div>
       </div>
 
+      {/* Payment History */}
       <div className="glass p-6 rounded-2xl border border-white/10 mb-8">
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-semibold font-title">Transaction History</h2>
-          <div className="flex gap-2">
-            <button
+          <h2 className="text-xl font-semibold font-title">Payment History</h2>
+          <div className="flex items-center gap-2">
+            <Button
+              variant={viewMode === 'list' ? 'default' : 'outline'}
+              size="sm"
               onClick={() => setViewMode('list')}
-              className={cn(
-                "flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
-                viewMode === 'list' 
-                  ? "bg-orange-400 text-white" 
-                  : "bg-white/10 text-white/60 hover:bg-white/20"
-              )}
+              className="flex items-center gap-2"
             >
               <List className="w-4 h-4" />
               List
-            </button>
-            <button
+            </Button>
+            <Button
+              variant={viewMode === 'graph' ? 'default' : 'outline'}
+              size="sm"
               onClick={() => setViewMode('graph')}
-              className={cn(
-                "flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
-                viewMode === 'graph' 
-                  ? "bg-orange-400 text-white" 
-                  : "bg-white/10 text-white/60 hover:bg-white/20"
-              )}
+              className="flex items-center gap-2"
             >
               <BarChart3 className="w-4 h-4" />
-              Graphs
-            </button>
+              Graph
+            </Button>
           </div>
         </div>
 
         {viewMode === 'list' ? (
-          payments.length > 0 ? (
+          paymentHistory.length > 0 ? (
             <div className="space-y-3">
-              {payments.map((payment) => (
-                <div
-                  key={payment.id}
-                  className="flex items-center justify-between p-4 rounded-xl bg-white/5 border border-white/10"
-                >
+              {paymentHistory.map((payment) => (
+                <div key={payment.id} className="flex items-center justify-between p-4 rounded-xl bg-white/5 border border-white/10">
                   <div className="flex items-center gap-4">
-                    <div
-                      className={cn(
-                        "p-2 rounded-lg",
-                        payment.type === 'received' ? "bg-green-500/10" : "bg-red-500/10"
-                      )}
-                    >
-                      {payment.type === 'received' ? (
-                        <ArrowDownLeft className="w-5 h-5 text-green-400" />
-                      ) : (
-                        <ArrowUpRight className="w-5 h-5 text-red-400" />
-                      )}
+                    <div className="p-2 rounded-lg bg-green-500/10">
+                      <ArrowDownLeft className="w-5 h-5 text-green-400" />
                     </div>
                     <div>
                       <p className="font-medium">{payment.counterparty}</p>
-                      <p className="text-sm text-white/50">{payment.date}</p>
+                      <p className="text-sm text-white/50">{new Date(payment.date).toLocaleDateString()}</p>
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className={cn(
-                      "font-semibold",
-                      payment.type === 'received' ? "text-green-400" : "text-red-400"
-                    )}>
-                      {payment.type === 'received' ? '+' : '-'}${Math.abs(payment.amount).toFixed(2)}
-                    </p>
-                    <span className="text-xs px-2 py-1 rounded-full bg-green-500/20 text-green-400">
-                      {payment.status}
-                    </span>
+                    <p className="font-semibold text-green-400">+{payment.amount.toFixed(8)} BTC</p>
+                    <p className="text-xs text-white/60">${(payment.amount * bitcoinPrice).toFixed(2)} USD</p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs px-2 py-1 rounded-full bg-green-500/20 text-green-400">
+                        {payment.status}
+                      </span>
+                      {payment.txHash && (
+                        <a
+                          href={`${MEZO_EXPLORER_URL}/tx/${payment.txHash}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1"
+                        >
+                          <ExternalLink className="w-3 h-3" />
+                          {payment.txHash.slice(0, 8)}...{payment.txHash.slice(-8)}
+                        </a>
+                      )}
+                      {payment.blockNumber && (
+                        <span className="text-xs text-white/50">
+                          Block #{payment.blockNumber}
+                        </span>
+                      )}
+                      {payment.confirmations !== undefined && (
+                        <span className="text-xs text-white/50">
+                          {payment.confirmations} confirmations
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
               ))}
             </div>
           ) : (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <div className="text-4xl mb-3">📭</div>
-              <p className="text-white/60 text-sm">No transactions yet</p>
-              <p className="text-white/40 text-xs mt-2">Your transaction history will appear here</p>
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <div className="w-20 h-20 rounded-full bg-gradient-to-r from-green-500/20 to-blue-500/20 flex items-center justify-center mb-6">
+                <div className="text-4xl">💰</div>
+              </div>
+              <h3 className="text-lg font-semibold mb-2 font-title">No confirmed payments yet</h3>
+              <p className="text-foreground/60 text-sm">Confirmed payments will appear here once invoices are marked as paid</p>
             </div>
           )
         ) : (
           chartData.length > 0 ? (
             <div className="space-y-6">
-              {/* Balance Chart */}
               <div>
-                <h3 className="text-lg font-semibold mb-4 text-white/80">Balance Over Time</h3>
-                <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={chartData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
-                      <XAxis 
-                        dataKey="day" 
-                        stroke="rgba(255,255,255,0.6)"
-                        fontSize={12}
-                      />
-                      <YAxis 
-                        stroke="rgba(255,255,255,0.6)"
-                        fontSize={12}
-                        tickFormatter={(value) => `$${value}`}
-                      />
-                      <Tooltip 
-                        contentStyle={{
-                          backgroundColor: 'rgba(0,0,0,0.8)',
-                          border: '1px solid rgba(255,255,255,0.2)',
-                          borderRadius: '8px',
-                          color: 'white'
-                        }}
-                        formatter={(value) => [`$${value}`, 'Balance']}
-                      />
-                      <Line 
-                        type="monotone" 
-                        dataKey="balance" 
-                        stroke="#f97316" 
-                        strokeWidth={3}
-                        dot={{ fill: '#f97316', strokeWidth: 2, r: 4 }}
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
+                <h3 className="text-lg font-semibold mb-4">Payment Trends</h3>
+                <ResponsiveContainer width="100%" height={300}>
+                  <LineChart data={chartData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+                    <XAxis dataKey="day" stroke="rgba(255,255,255,0.6)" />
+                    <YAxis stroke="rgba(255,255,255,0.6)" />
+                    <Tooltip 
+                      contentStyle={{ 
+                        backgroundColor: 'rgba(0,0,0,0.8)', 
+                        border: '1px solid rgba(255,255,255,0.2)',
+                        borderRadius: '8px'
+                      }} 
+                    />
+                    <Line type="monotone" dataKey="balance" stroke="#f97316" strokeWidth={2} />
+                  </LineChart>
+                </ResponsiveContainer>
               </div>
-
-              {/* Received vs Sent Chart */}
+              
               <div>
-                <h3 className="text-lg font-semibold mb-4 text-white/80">Paid/Deposited vs Spent/Borrowed</h3>
-                <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={chartData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
-                      <XAxis 
-                        dataKey="day" 
-                        stroke="rgba(255,255,255,0.6)"
-                        fontSize={12}
-                      />
-                      <YAxis 
-                        stroke="rgba(255,255,255,0.6)"
-                        fontSize={12}
-                        tickFormatter={(value) => `$${value}`}
-                      />
-                      <Tooltip 
-                        contentStyle={{
-                          backgroundColor: 'rgba(0,0,0,0.8)',
-                          border: '1px solid rgba(255,255,255,0.2)',
-                          borderRadius: '8px',
-                          color: 'white'
-                        }}
-                        formatter={(value) => [`$${value}`, '']}
-                      />
-                      <Bar dataKey="received" fill="#10b981" name="Paid/Deposited" />
-                      <Bar dataKey="sent" fill="#ef4444" name="Spent/Borrowed" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
+                <h3 className="text-lg font-semibold mb-4">Daily Payments</h3>
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={chartData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+                    <XAxis dataKey="day" stroke="rgba(255,255,255,0.6)" />
+                    <YAxis stroke="rgba(255,255,255,0.6)" />
+                    <Tooltip 
+                      contentStyle={{ 
+                        backgroundColor: 'rgba(0,0,0,0.8)', 
+                        border: '1px solid rgba(255,255,255,0.2)',
+                        borderRadius: '8px'
+                      }} 
+                    />
+                    <Bar dataKey="received" fill="#10b981" />
+                  </BarChart>
+                </ResponsiveContainer>
               </div>
             </div>
           ) : (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <div className="text-4xl mb-3">📊</div>
-              <p className="text-white/60 text-sm">No data to display</p>
-              <p className="text-white/40 text-xs mt-2">Charts will appear when you have transactions</p>
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <div className="w-20 h-20 rounded-full bg-gradient-to-r from-green-500/20 to-blue-500/20 flex items-center justify-center mb-6">
+                <div className="text-4xl">📊</div>
+              </div>
+              <h3 className="text-lg font-semibold mb-2 font-title">No data to display</h3>
+              <p className="text-foreground/60 text-sm">Payment charts will appear once you have confirmed payments</p>
             </div>
           )
         )}
       </div>
 
-      <div className="flex justify-center mt-8">
+      {/* Withdraw Funds Button */}
+      <div className="flex justify-center">
         <Button
           onClick={() => setShowWithdrawModal(true)}
-          className="bg-orange-400 hover:bg-orange-500 text-white border-0 h-14 px-8 text-base font-medium shadow-2xl"
+          className="px-8 py-3 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-medium rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl"
         >
           Withdraw Funds
         </Button>
       </div>
 
+      {/* Withdraw Modal */}
       {showWithdrawModal && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="glass p-8 rounded-3xl border border-white/20 w-full max-w-md mx-4">
-            <h2 className="text-2xl font-bold mb-6 font-title">Withdraw Funds</h2>
-
-            <div className="space-y-4 mb-6">
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="glass-card p-6 rounded-2xl w-full max-w-md">
+            <h3 className="text-xl font-semibold mb-6 font-title">Withdraw Funds</h3>
+            
+            <div className="space-y-4">
               <div>
-                <Label className="text-sm text-white/70 mb-2 block">Connected Wallet</Label>
-                <div className="glass border-white/20 px-4 py-3 rounded-lg text-white/80 text-sm flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-green-400"></div>
-                  {isConnected && account ? formatAddress(account) : 'Not connected'}
-                </div>
-              </div>
-
-              <div>
-                <Label htmlFor="withdrawAmount" className="text-sm text-white/70 mb-2 block">
-                  Amount (USD)
+                <Label htmlFor="amount" className="text-sm font-medium text-white/80">
+                  Amount (MUSD)
                 </Label>
                 <Input
-                  id="withdrawAmount"
+                  id="amount"
                   type="number"
                   value={withdrawAmount}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setWithdrawAmount(e.target.value)}
+                  onChange={(e) => setWithdrawAmount(e.target.value)}
                   placeholder="0.00"
-                  className="glass border-white/20 focus:border-white/40 text-white placeholder:text-white/40"
+                  className="mt-2"
                 />
+              </div>
+              
+              <div className="p-3 bg-white/5 rounded-xl">
+                <p className="text-sm text-white/80">
+                  Available Balance: <span className="font-semibold text-orange-400">${(totalReceived - totalSent).toFixed(2)} MUSD</span>
+                </p>
               </div>
             </div>
 
-            <div className="flex gap-4">
+            <div className="flex gap-3 mt-6">
               <Button
-                onClick={() => setShowWithdrawModal(false)}
                 variant="outline"
-                className="flex-1 border border-white/20 text-white hover:bg-white/10"
+                onClick={() => setShowWithdrawModal(false)}
+                className="flex-1"
               >
                 Cancel
               </Button>
               <Button
                 onClick={handleWithdraw}
-                disabled={!withdrawAmount}
-                className="flex-1 bg-orange-400 hover:bg-orange-500 text-white border-0"
+                className="flex-1 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700"
               >
-                Confirm
+                Withdraw
               </Button>
             </div>
           </div>
