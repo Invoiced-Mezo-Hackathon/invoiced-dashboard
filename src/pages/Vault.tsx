@@ -2,8 +2,10 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Info } from 'lucide-react';
+import { Info, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
 import { useWallet } from '@/contexts/WalletContext';
+import { useMezoVault } from '@/hooks/useMezoVault';
+import { MezoUtils } from '@/lib/mezo';
 
 type VaultAction = 'deposit' | 'borrow' | 'repay' | 'withdraw' | null;
 
@@ -11,16 +13,66 @@ export function Vault() {
   const { address, isConnected } = useWallet();
   const [activeAction, setActiveAction] = useState<VaultAction>(null);
   const [actionAmount, setActionAmount] = useState('');
+  
+  const { 
+    vaultData, 
+    isLoading, 
+    error,
+    musdBalance,
+    collateralBalance,
+    borrowedAmount,
+    collateralRatio,
+    interestRate,
+    healthFactor,
+    depositCollateral,
+    borrowMUSD,
+    repayMUSD,
+    withdrawCollateral,
+    isPending,
+    isConfirming,
+    isSuccess,
+    transactionHash,
+  } = useMezoVault();
 
-  const collateralRatio = 0; // percentage
-  const btcBalance = 0;
-  const musdBorrowed = 0;
-  const btcValue = 0;
+  const handleAction = async () => {
+    if (!activeAction || !actionAmount) return;
 
-  const handleAction = () => {
-    console.log(`${activeAction}:`, actionAmount);
-    setActionAmount('');
-    setActiveAction(null);
+    try {
+      switch (activeAction) {
+        case 'deposit':
+          await depositCollateral(actionAmount);
+          break;
+        case 'borrow':
+          await borrowMUSD(actionAmount);
+          break;
+        case 'repay':
+          await repayMUSD(actionAmount);
+          break;
+        case 'withdraw':
+          await withdrawCollateral(actionAmount);
+          break;
+      }
+      
+      setActionAmount('');
+      setActiveAction(null);
+    } catch (err) {
+      console.error('Vault action failed:', err);
+      // Error is handled by the hook
+    }
+  };
+
+  const getRiskLevel = () => {
+    if (!vaultData) return 'safe';
+    return MezoUtils.getRiskLevel(vaultData.healthFactor);
+  };
+
+  const getRiskColor = (riskLevel: string) => {
+    switch (riskLevel) {
+      case 'safe': return 'text-green-600';
+      case 'warning': return 'text-yellow-600';
+      case 'danger': return 'text-red-600';
+      default: return 'text-gray-600';
+    }
   };
 
   const getActionTitle = () => {
@@ -28,6 +80,40 @@ export function Vault() {
     return activeAction.charAt(0).toUpperCase() + activeAction.slice(1);
   };
 
+  const getAmountLabel = () => {
+    switch (activeAction) {
+      case 'deposit':
+      case 'withdraw':
+        return 'Amount (BTC)';
+      case 'borrow':
+      case 'repay':
+        return 'Amount (MUSD)';
+      default:
+        return 'Amount';
+    }
+  };
+
+  const getBalanceInfo = () => {
+    switch (activeAction) {
+      case 'deposit':
+      case 'withdraw':
+        return {
+          label: 'Current BTC Balance',
+          value: `${vaultData?.collateralAmount || '0'} BTC`
+        };
+      case 'borrow':
+      case 'repay':
+        return {
+          label: 'Current MUSD Balance',
+          value: `${musdBalance} MUSD`
+        };
+      default:
+        return {
+          label: 'Balance',
+          value: '0'
+        };
+    }
+  };
 
   return (
     <div className="flex-1 h-screen overflow-y-auto p-8">
@@ -56,12 +142,12 @@ export function Vault() {
                 fill="none"
                 stroke="rgba(74, 222, 128, 0.8)"
                 strokeWidth="12"
-                strokeDasharray={`${(collateralRatio / 200) * 502.4} 502.4`}
+                strokeDasharray={`${((vaultData?.collateralRatio || 0) / 200) * 502.4} 502.4`}
                 strokeLinecap="round"
               />
             </svg>
             <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <p className="text-4xl font-bold">{collateralRatio}%</p>
+              <p className="text-4xl font-bold">{vaultData?.collateralRatio || 0}%</p>
               <div className="flex items-center gap-1">
                 <p className="text-sm text-white/60">Collateral Ratio</p>
                 <div className="group relative">
@@ -85,7 +171,7 @@ export function Vault() {
                   </div>
                 </div>
               </div>
-              <p className="text-xl font-bold">{btcBalance}</p>
+              <p className="text-xl font-bold">{vaultData?.collateralAmount || '0'} BTC</p>
             </div>
             <div className="text-center border-x border-white/10">
               <div className="flex items-center justify-center gap-1 mb-1">
@@ -97,7 +183,7 @@ export function Vault() {
                   </div>
                 </div>
               </div>
-              <p className="text-xl font-bold">{musdBorrowed.toLocaleString()}</p>
+              <p className="text-xl font-bold">{vaultData?.borrowedAmount || '0'}</p>
             </div>
             <div className="text-center">
               <div className="flex items-center justify-center gap-1 mb-1">
@@ -109,7 +195,9 @@ export function Vault() {
                   </div>
                 </div>
               </div>
-              <p className="text-xl font-bold text-green-400">Healthy</p>
+              <p className={`text-xl font-bold ${getRiskColor(getRiskLevel())}`}>
+                {getRiskLevel().charAt(0).toUpperCase() + getRiskLevel().slice(1)}
+              </p>
             </div>
           </div>
         </div>
@@ -152,15 +240,35 @@ export function Vault() {
         <div className="glass p-6 rounded-2xl border border-white/10">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-white/60 mb-1">Total Collateral Value</p>
-              <p className="text-3xl font-bold">${btcValue.toLocaleString()}</p>
+              <p className="text-sm text-white/60 mb-1">MUSD Balance</p>
+              <p className="text-3xl font-bold">{musdBalance} MUSD</p>
             </div>
             <div className="text-right">
-              <p className="text-sm text-white/60 mb-1">Available to Borrow</p>
-              <p className="text-2xl font-bold text-green-400">${(btcValue * 0.5 - musdBorrowed).toLocaleString()}</p>
+              <p className="text-sm text-white/60 mb-1">Interest Rate</p>
+              <p className="text-2xl font-bold text-green-400">{vaultData?.interestRate || 0}%</p>
             </div>
           </div>
         </div>
+
+        {/* Error Display */}
+        {error && (
+          <div className="glass p-4 rounded-2xl border border-red-500/20 bg-red-500/10">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-5 h-5 text-red-400" />
+              <p className="text-red-400">{error}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Success Display */}
+        {isSuccess && (
+          <div className="glass p-4 rounded-2xl border border-green-500/20 bg-green-500/10">
+            <div className="flex items-center gap-2">
+              <CheckCircle className="w-5 h-5 text-green-400" />
+              <p className="text-green-400">Transaction successful!</p>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Action Modal */}
@@ -172,7 +280,7 @@ export function Vault() {
             <div className="space-y-4 mb-6">
               <div>
                 <Label htmlFor="actionAmount" className="text-sm text-white/70 mb-2 block">
-                  Amount (MUSD)
+                  {getAmountLabel()}
                 </Label>
                 <Input
                   id="actionAmount"
@@ -182,7 +290,7 @@ export function Vault() {
                   placeholder="0.00"
                   className="glass border-white/20 focus:border-white/40 text-white placeholder:text-white/40"
                 />
-                {actionAmount && (
+                {actionAmount && (activeAction === 'borrow' || activeAction === 'repay') && (
                   <p className="text-xs text-white/50 mt-1">
                     ≈ {parseFloat(actionAmount || '0') * 1.02} USD
                   </p>
@@ -197,8 +305,8 @@ export function Vault() {
               </div>
 
               <div className="glass border-white/20 px-4 py-3 rounded-lg">
-                <p className="text-xs text-white/60 mb-1">Current Balance</p>
-                <p className="text-sm text-white/80 font-mono">{musdBorrowed.toLocaleString()} MUSD</p>
+                <p className="text-xs text-white/60 mb-1">{getBalanceInfo().label}</p>
+                <p className="text-sm text-white/80 font-mono">{getBalanceInfo().value}</p>
               </div>
             </div>
 
@@ -212,10 +320,17 @@ export function Vault() {
               </Button>
               <Button
                 onClick={handleAction}
-                disabled={!actionAmount}
+                disabled={!actionAmount || isLoading}
                 className="flex-1 bg-orange-400 hover:bg-orange-500 text-white border-0"
               >
-                Confirm {getActionTitle()}
+                {isLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Processing...
+                  </>
+                ) : (
+                  `Confirm ${getActionTitle()}`
+                )}
               </Button>
             </div>
           </div>
