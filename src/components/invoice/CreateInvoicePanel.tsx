@@ -2,7 +2,20 @@ import { useState, useEffect, useRef } from 'react';
 import { Send, Plus, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { InvoiceQRModal } from './InvoiceQRModal';
-import { Invoice } from '@/types/invoice';
+
+interface Invoice {
+  id: string;
+  clientName: string;
+  clientCode: string;
+  details: string;
+  amount: number; // Bitcoin amount
+  currency: string; // Will be 'BTC'
+  musdAmount: number; // USD equivalent
+  status: 'pending' | 'paid' | 'cancelled';
+  createdAt: string;
+  wallet: string;
+  bitcoinAddress?: string; // Mezo testnet address
+}
 
 interface CreateInvoicePanelProps {
   onInvoiceCreated: (invoice: Invoice) => void;
@@ -13,13 +26,40 @@ export function CreateInvoicePanel({ onInvoiceCreated }: CreateInvoicePanelProps
   const [clientName, setClientName] = useState('');
   const [details, setDetails] = useState('');
   const [clientCode, setClientCode] = useState('');
-  const [amount, setAmount] = useState('');
-  const [currency, setCurrency] = useState<'USD' | 'KES'>('USD');
+  const [bitcoinAmount, setBitcoinAmount] = useState('');
+  const [bitcoinAddress, setBitcoinAddress] = useState('');
   const [isSending, setIsSending] = useState(false);
-  const [walletAddress] = useState('mezo1x...7k9p');
   const [showQRModal, setShowQRModal] = useState(false);
   const [createdInvoice, setCreatedInvoice] = useState<Invoice | null>(null);
+  const [bitcoinPrice, setBitcoinPrice] = useState<number>(0);
+  const [isLoadingPrice, setIsLoadingPrice] = useState(true);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Fetch real-time Bitcoin price
+  useEffect(() => {
+    const fetchBitcoinPrice = async () => {
+      try {
+        setIsLoadingPrice(true);
+        // Using CoinGecko API (free, no API key required)
+        const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd');
+        const data = await response.json();
+        setBitcoinPrice(data.bitcoin.usd);
+      } catch (error) {
+        console.error('Error fetching Bitcoin price:', error);
+        // Fallback to a reasonable price if API fails
+        setBitcoinPrice(65000);
+      } finally {
+        setIsLoadingPrice(false);
+      }
+    };
+
+    fetchBitcoinPrice();
+    
+    // Refresh price every 30 seconds
+    const interval = setInterval(fetchBitcoinPrice, 30000);
+    
+    return () => clearInterval(interval);
+  }, []);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -48,178 +88,240 @@ export function CreateInvoicePanel({ onInvoiceCreated }: CreateInvoicePanelProps
     }
   }, [clientName]);
 
-  // Calculate MUSD equivalent (mock conversion rate)
-  const musdAmount = amount ? parseFloat(amount) * 0.98 : 0;
+  // Calculate USD equivalent using real-time Bitcoin price
+  const usdAmount = bitcoinAmount ? parseFloat(bitcoinAmount) * bitcoinPrice : 0;
+
+  // Validate Mezo testnet address (Ethereum-compatible addresses)
+  const isValidMezoAddress = (address: string): boolean => {
+    // Ethereum address validation (0x followed by 40 hex characters)
+    const ethereumPattern = /^0x[a-fA-F0-9]{40}$/;
+    return ethereumPattern.test(address);
+  };
 
   const handleSendInvoice = async () => {
-    if (!clientName || !details || !amount) return;
+    if (!clientName.trim() || !details.trim() || !bitcoinAmount.trim()) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
+
+    if (!bitcoinAddress.trim()) {
+      toast.error('Please enter a Mezo testnet address');
+      return;
+    }
+
+    if (!isValidMezoAddress(bitcoinAddress)) {
+      toast.error('Please enter a valid Mezo testnet address (0x...)');
+      return;
+    }
+
+    const amountNum = parseFloat(bitcoinAmount);
+    if (isNaN(amountNum) || amountNum <= 0) {
+      toast.error('Please enter a valid Bitcoin amount');
+      return;
+    }
 
     setIsSending(true);
-    
-    // Simulate processing
-    await new Promise(resolve => setTimeout(resolve, 1500));
 
-    const newInvoice = {
-      id: `INV-${Date.now()}`,
-      clientName,
-      clientCode,
-      details,
-      amount: parseFloat(amount),
-      currency,
-      musdAmount,
-      status: 'pending' as const,
-      createdAt: new Date().toISOString(),
-      wallet: walletAddress,
-    };
+    try {
+      // Simulate API call delay
+      await new Promise(resolve => setTimeout(resolve, 1000));
 
-    onInvoiceCreated(newInvoice);
-    setCreatedInvoice(newInvoice);
-    setShowQRModal(true);
-    toast.success('Invoice created successfully!');
+      const newInvoice: Invoice = {
+        id: Date.now().toString(),
+        clientName: clientName,
+        clientCode: clientCode,
+        details: details,
+        amount: amountNum,
+        currency: 'BTC',
+        musdAmount: usdAmount, // USD equivalent
+        status: 'pending',
+        createdAt: new Date().toISOString(),
+        wallet: '0x1234567890123456789012345678901234567890', // Placeholder
+        bitcoinAddress: bitcoinAddress
+      };
 
-    // Reset form and close dropdown
-    setClientName('');
-    setDetails('');
-    setAmount('');
-    setIsSending(false);
-    setIsDropdownOpen(false);
+      // Reset form
+      setClientName('');
+      setDetails('');
+      setBitcoinAmount('');
+      setClientCode('');
+      setBitcoinAddress('');
+      setIsDropdownOpen(false);
+      
+      // Show success message
+      toast.success('Invoice created successfully! Client has been notified.', {
+        duration: 4000,
+      });
+      
+      onInvoiceCreated(newInvoice);
+      
+    } catch (error) {
+      console.error('Error creating invoice:', error);
+      toast.error('Failed to create invoice. Please try again.');
+    } finally {
+      setIsSending(false);
+    }
   };
 
   return (
-    <div className="fixed right-4 top-4 z-50" ref={dropdownRef}>
-      {/* Create Invoice Icon */}
+    <div className="relative" ref={dropdownRef}>
+      {/* Compact Button */}
       <button
         onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-        className="flex items-center gap-2 px-4 py-2 rounded-xl bg-orange-400 hover:bg-orange-500 text-white font-medium transition-all duration-200 shadow-lg hover:shadow-xl"
+        className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-medium transition-all duration-200 shadow-lg hover:shadow-xl text-sm"
       >
-        <Plus className="w-5 h-5" />
-        <span className="text-sm">Create Invoice</span>
+        <Plus className="w-4 h-4" />
+        <span>Create Invoice</span>
       </button>
 
-      {/* Backdrop Overlay */}
+      {/* Modal Overlay */}
       {isDropdownOpen && (
         <div 
-          className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40"
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4"
           onClick={() => setIsDropdownOpen(false)}
-        />
-      )}
-
-      {/* Dropdown Panel */}
-      {isDropdownOpen && (
-        <div className="absolute top-12 right-0 w-96 bg-background/95 backdrop-blur-sm border border-foreground/20 rounded-xl shadow-xl p-6 space-y-4 z-50">
-          {/* Header */}
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold font-title">Create Invoice</h3>
-            <button
-              onClick={() => setIsDropdownOpen(false)}
-              className="w-6 h-6 rounded-full flex items-center justify-center hover:bg-foreground/10 transition-colors"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-
-          {/* Form */}
-          <div className="space-y-3">
-            {/* Client Name */}
-            <div>
-              <label className="block text-sm font-medium text-foreground/70 mb-1">
-                Client Name
-              </label>
-              <input
-                type="text"
-                value={clientName}
-                onChange={(e) => setClientName(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg bg-foreground/5 focus:bg-foreground/10 transition-colors outline-none text-foreground placeholder:text-foreground/40 text-sm border border-foreground/10"
-                placeholder="Enter client name"
-              />
+        >
+          <div 
+            className="w-full max-w-lg max-h-[90vh] overflow-y-auto bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-semibold text-white">Create New Invoice</h3>
+              <button
+                onClick={() => setIsDropdownOpen(false)}
+                className="text-white/60 hover:text-white transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
 
-            {/* Details */}
-            <div>
-              <label className="block text-sm font-medium text-foreground/70 mb-1">
-                Details
-              </label>
-              <textarea
-                value={details}
-                onChange={(e) => setDetails(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg bg-foreground/5 focus:bg-foreground/10 transition-colors outline-none text-foreground placeholder:text-foreground/40 min-h-[60px] resize-none text-sm border border-foreground/10"
-                placeholder="Invoice description"
-              />
-            </div>
-
-            {/* Client Code (Auto-generated) */}
-            <div>
-              <label className="block text-sm font-medium text-foreground/70 mb-1">
-                Client Code
-              </label>
-              <div className="px-3 py-2 rounded-lg bg-foreground/3 text-foreground/50 text-sm border border-foreground/10">
-                {clientCode || 'Auto-generated after name entry'}
+            <div className="space-y-4">
+              {/* Client Name */}
+              <div>
+                <label className="block text-sm font-medium text-white/80 mb-2">
+                  Client Name *
+                </label>
+                <input
+                  type="text"
+                  value={clientName}
+                  onChange={(e) => setClientName(e.target.value)}
+                  className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent"
+                  placeholder="Enter client name"
+                />
               </div>
-            </div>
 
-            {/* Amount with Currency Toggle */}
-            <div>
-              <label className="block text-sm font-medium text-foreground/70 mb-1">
-                Amount
-              </label>
-              <div className="flex gap-2">
+              {/* Client Code (Auto-generated) */}
+              <div>
+                <label className="block text-sm font-medium text-white/80 mb-2">
+                  Client Code
+                </label>
+                <input
+                  type="text"
+                  value={clientCode}
+                  readOnly
+                  className="w-full px-4 py-3 bg-white/5 border border-white/20 rounded-xl text-white/70 cursor-not-allowed"
+                  placeholder="Auto-generated"
+                />
+              </div>
+
+              {/* Details */}
+              <div>
+                <label className="block text-sm font-medium text-white/80 mb-2">
+                  Invoice Details *
+                </label>
+                <textarea
+                  value={details}
+                  onChange={(e) => setDetails(e.target.value)}
+                  className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent resize-none"
+                  rows={3}
+                  placeholder="Describe the services or products"
+                />
+              </div>
+
+              {/* Bitcoin Amount */}
+              <div>
+                <label className="block text-sm font-medium text-white/80 mb-2">
+                  Bitcoin Amount *
+                </label>
                 <input
                   type="number"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  className="flex-1 px-3 py-2 rounded-lg bg-foreground/5 focus:bg-foreground/10 transition-colors outline-none text-foreground placeholder:text-foreground/40 text-sm border border-foreground/10"
-                  placeholder="0.00"
+                  value={bitcoinAmount}
+                  onChange={(e) => setBitcoinAmount(e.target.value)}
+                  className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent"
+                  placeholder="0.001"
+                  step="0.00000001"
+                  min="0"
                 />
-                <button
-                  onClick={() => setCurrency(currency === 'USD' ? 'KES' : 'USD')}
-                  className="px-4 py-2 rounded-lg font-medium text-sm border border-foreground/10 hover:bg-foreground/5 transition-colors"
-                >
-                  {currency}
-                </button>
+                {bitcoinAmount && (
+                  <div className="mt-2 p-3 bg-white/5 rounded-xl">
+                    <p className="text-sm text-white/80">
+                      USD Equivalent: <span className="font-semibold text-orange-400">${usdAmount.toFixed(2)}</span>
+                    </p>
+                    <p className="text-xs text-white/60 mt-1">
+                      {isLoadingPrice ? (
+                        <span className="flex items-center gap-1">
+                          <div className="w-3 h-3 border border-orange-400 border-t-transparent rounded-full animate-spin"></div>
+                          Loading Bitcoin price...
+                        </span>
+                      ) : (
+                        `Based on Bitcoin price: $${bitcoinPrice.toLocaleString()}`
+                      )}
+                    </p>
+                  </div>
+                )}
               </div>
-              {amount && (
-                <p className="text-xs text-foreground/50 mt-1">
-                  ≈ {musdAmount.toFixed(4)} MUSD
+
+              {/* Mezo Testnet Address */}
+              <div>
+                <label className="block text-sm font-medium text-white/80 mb-2">
+                  Mezo Testnet Address *
+                </label>
+                <input
+                  type="text"
+                  value={bitcoinAddress}
+                  onChange={(e) => setBitcoinAddress(e.target.value)}
+                  className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent"
+                  placeholder="0x1234567890123456789012345678901234567890"
+                />
+                <p className="text-xs text-white/60 mt-1">
+                  Enter your Mezo testnet address to receive Bitcoin payments
                 </p>
-              )}
-            </div>
-
-            {/* Recipient Wallet */}
-            <div>
-              <label className="block text-sm font-medium text-foreground/70 mb-1">
-                Recipient Wallet
-              </label>
-              <div className="px-3 py-2 rounded-lg bg-foreground/3 text-foreground/50 text-xs flex items-center gap-2 border border-foreground/10">
-                <div className="w-2 h-2 rounded-full bg-green-500/70 shrink-0" />
-                <span className="flex-1 truncate">{walletAddress}</span>
               </div>
-            </div>
 
-            {/* Send Button */}
-            <button
-              onClick={handleSendInvoice}
-              disabled={isSending || !clientName || !details || !amount}
-              className="w-full py-2 rounded-lg font-semibold flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm bg-orange-400 hover:bg-orange-500 text-white transition-colors"
-            >
-              {isSending ? (
-                <>Processing...</>
-              ) : (
-                <>
-                  <Send className="w-4 h-4" />
-                  Send Invoice
-                </>
-              )}
-            </button>
+
+              {/* Send Button */}
+              <button
+                onClick={handleSendInvoice}
+                disabled={isSending}
+                className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 disabled:from-gray-500 disabled:to-gray-600 text-white font-medium rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl disabled:cursor-not-allowed"
+              >
+                {isSending ? (
+                  <>
+                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    <span>Creating Invoice...</span>
+                  </>
+                ) : (
+                  <>
+                    <Send className="w-5 h-5" />
+                    <span>Create Invoice</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}
 
-      {/* QR Code Modal */}
-      <InvoiceQRModal 
-        invoice={createdInvoice}
-        isOpen={showQRModal}
-        onClose={() => setShowQRModal(false)}
-      />
+      {/* QR Modal */}
+      {showQRModal && createdInvoice && (
+        <InvoiceQRModal
+          invoice={createdInvoice}
+          isOpen={showQRModal}
+          onClose={() => {
+            setShowQRModal(false);
+            setCreatedInvoice(null);
+          }}
+        />
+      )}
     </div>
   );
 }

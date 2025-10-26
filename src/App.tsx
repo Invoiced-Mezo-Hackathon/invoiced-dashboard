@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAccount } from 'wagmi';
 import { WalletProvider } from '@/contexts/WalletContext';
 import { Sidebar } from '@/components/layout/Sidebar';
-import { CreateInvoicePanel } from '@/components/invoice/CreateInvoicePanel';
+import { Header } from '@/components/layout/Header';
 import { NetworkSwitchModal } from '@/components/ui/NetworkSwitchModal';
 import { Dashboard } from '@/pages/Dashboard';
 import { Invoices } from '@/pages/Invoices';
@@ -23,6 +23,7 @@ interface Invoice {
   status: 'pending' | 'paid' | 'cancelled';
   createdAt: string;
   wallet: string;
+  bitcoinAddress?: string;
 }
 
 function App() {
@@ -67,17 +68,17 @@ function App() {
   const renderContent = () => {
     switch (activeTab) {
       case 'dashboard':
-        return <Dashboard onNavigate={setActiveTab} />;
+        return <Dashboard onNavigate={setActiveTab} invoices={invoices} />;
       case 'invoices':
-        return <Invoices invoices={invoices} onUpdateInvoice={handleUpdateInvoice} />;                                                                          
+        return <Invoices invoices={invoices} onUpdateInvoice={handleUpdateInvoice} onInvoiceCreated={handleInvoiceCreated} />;                                                                          
       case 'payments':
-        return <Payments />;
+        return <Payments invoices={invoices} />;
       case 'vault':
         return <Vault />;
       case 'settings':
         return <Settings />;
       default:
-        return <Dashboard onNavigate={setActiveTab} />;
+        return <Dashboard onNavigate={setActiveTab} invoices={invoices} />;
     }
   };
 
@@ -96,8 +97,8 @@ function App() {
           <div className="flex-1">
             {renderContent()}
           </div>
-          <CreateInvoicePanel 
-            onInvoiceCreated={handleInvoiceCreated} 
+          <Header 
+            onShowNetworkModal={() => setShowNetworkModal(true)}
           />
         </div>
       </div>

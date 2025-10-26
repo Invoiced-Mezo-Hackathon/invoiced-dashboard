@@ -1,6 +1,5 @@
 import { Home, FileText, CreditCard, Vault, Settings } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { WalletStatus } from '@/components/ui/WalletStatus';
 
 interface SidebarProps {
   activeTab: string;
@@ -66,12 +65,6 @@ export function Sidebar({ activeTab, onTabChange, onShowNetworkModal }: SidebarP
         ))}
       </nav>
 
-      {/* Wallet Connection Section */}
-      <div className="p-4 sm:p-5 lg:p-6 border-t border-border">
-        <div className="glass p-4 sm:p-5 rounded-xl sm:rounded-2xl">
-          <WalletStatus onShowNetworkModal={onShowNetworkModal} />
-        </div>
-      </div>
     </aside>
   );
 }

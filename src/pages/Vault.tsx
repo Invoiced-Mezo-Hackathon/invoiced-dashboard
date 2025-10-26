@@ -2,25 +2,95 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Info } from 'lucide-react';
+import { Info, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
 import { useWallet } from '@/contexts/WalletContext';
+import { useMezoVault } from '@/hooks/useMezoVault';
+import { MezoUtils } from '@/lib/mezo';
 
-type VaultAction = 'deposit' | 'borrow' | 'repay' | 'withdraw' | null;
+type VaultAction = 'deposit' | 'borrow' | 'repay' | 'withdraw' | 'send' | null;
 
 export function Vault() {
   const { address, isConnected } = useWallet();
   const [activeAction, setActiveAction] = useState<VaultAction>(null);
   const [actionAmount, setActionAmount] = useState('');
+  const [recipientAddress, setRecipientAddress] = useState('');
+  
+  const { 
+    vaultData, 
+    isLoading, 
+    error,
+    musdBalance,
+    collateralBalance,
+    borrowedAmount,
+    collateralRatio,
+    interestRate,
+    healthFactor,
+    depositCollateral,
+    borrowMUSD,
+    repayMUSD,
+    withdrawCollateral,
+    sendBitcoin,
+    isPending,
+    isConfirming,
+    isSuccess,
+    transactionHash,
+    isDepositSuccess,
+    isBorrowSuccess,
+    isRepaySuccess,
+    isWithdrawSuccess,
+    depositHash,
+    borrowHash,
+    repayHash,
+    withdrawHash,
+    sendBitcoinHash,
+  } = useMezoVault();
 
-  const collateralRatio = 0; // percentage
-  const btcBalance = 0;
-  const musdBorrowed = 0;
-  const btcValue = 0;
+  const handleAction = async () => {
+    if (!activeAction || !actionAmount) return;
+    
+    // For send action, also require recipient address
+    if (activeAction === 'send' && !recipientAddress) return;
 
-  const handleAction = () => {
-    console.log(`${activeAction}:`, actionAmount);
-    setActionAmount('');
-    setActiveAction(null);
+    try {
+      switch (activeAction) {
+        case 'deposit':
+          await depositCollateral(actionAmount);
+          break;
+        case 'borrow':
+          await borrowMUSD(actionAmount);
+          break;
+        case 'repay':
+          await repayMUSD(actionAmount);
+          break;
+        case 'withdraw':
+          await withdrawCollateral(actionAmount);
+          break;
+        case 'send':
+          await sendBitcoin(recipientAddress, actionAmount);
+          break;
+      }
+      
+      setActionAmount('');
+      setRecipientAddress('');
+      setActiveAction(null);
+    } catch (err) {
+      console.error('Vault action failed:', err);
+      // Error is handled by the hook
+    }
+  };
+
+  const getRiskLevel = () => {
+    if (!vaultData) return 'safe';
+    return MezoUtils.getRiskLevel(vaultData.healthFactor);
+  };
+
+  const getRiskColor = (riskLevel: string) => {
+    switch (riskLevel) {
+      case 'safe': return 'text-green-600';
+      case 'warning': return 'text-yellow-600';
+      case 'danger': return 'text-red-600';
+      default: return 'text-gray-600';
+    }
   };
 
   const getActionTitle = () => {
@@ -28,6 +98,42 @@ export function Vault() {
     return activeAction.charAt(0).toUpperCase() + activeAction.slice(1);
   };
 
+  const getAmountLabel = () => {
+    switch (activeAction) {
+      case 'deposit':
+      case 'withdraw':
+      case 'send':
+        return 'Amount (BTC)';
+      case 'borrow':
+      case 'repay':
+        return 'Amount (MUSD)';
+      default:
+        return 'Amount';
+    }
+  };
+
+  const getBalanceInfo = () => {
+    switch (activeAction) {
+      case 'deposit':
+      case 'withdraw':
+      case 'send':
+        return {
+          label: 'Current BTC Balance',
+          value: `${vaultData?.collateralAmount || '0'} BTC`
+        };
+      case 'borrow':
+      case 'repay':
+        return {
+          label: 'Current MUSD Balance',
+          value: `${musdBalance} MUSD`
+        };
+      default:
+        return {
+          label: 'Balance',
+          value: '0'
+        };
+    }
+  };
 
   return (
     <div className="flex-1 h-screen overflow-y-auto p-8">
@@ -56,12 +162,12 @@ export function Vault() {
                 fill="none"
                 stroke="rgba(74, 222, 128, 0.8)"
                 strokeWidth="12"
-                strokeDasharray={`${(collateralRatio / 200) * 502.4} 502.4`}
+                strokeDasharray={`${((vaultData?.collateralRatio || 0) / 200) * 502.4} 502.4`}
                 strokeLinecap="round"
               />
             </svg>
             <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <p className="text-4xl font-bold">{collateralRatio}%</p>
+              <p className="text-4xl font-bold">{vaultData?.collateralRatio || 0}%</p>
               <div className="flex items-center gap-1">
                 <p className="text-sm text-white/60">Collateral Ratio</p>
                 <div className="group relative">
@@ -85,7 +191,7 @@ export function Vault() {
                   </div>
                 </div>
               </div>
-              <p className="text-xl font-bold">{btcBalance}</p>
+              <p className="text-xl font-bold">{vaultData?.collateralAmount || '0'} BTC</p>
             </div>
             <div className="text-center border-x border-white/10">
               <div className="flex items-center justify-center gap-1 mb-1">
@@ -97,7 +203,7 @@ export function Vault() {
                   </div>
                 </div>
               </div>
-              <p className="text-xl font-bold">{musdBorrowed.toLocaleString()}</p>
+              <p className="text-xl font-bold">{vaultData?.borrowedAmount || '0'}</p>
             </div>
             <div className="text-center">
               <div className="flex items-center justify-center gap-1 mb-1">
@@ -109,14 +215,16 @@ export function Vault() {
                   </div>
                 </div>
               </div>
-              <p className="text-xl font-bold text-green-400">Healthy</p>
+              <p className={`text-xl font-bold ${getRiskColor(getRiskLevel())}`}>
+                {getRiskLevel().charAt(0).toUpperCase() + getRiskLevel().slice(1)}
+              </p>
             </div>
           </div>
         </div>
 
         {/* Action Buttons */}
-        <div className="grid grid-cols-4 gap-4">
-          {(['deposit', 'borrow', 'repay', 'withdraw'] as const).map((action) => {
+        <div className="grid grid-cols-5 gap-4">
+          {(['deposit', 'borrow', 'repay', 'withdraw', 'send'] as const).map((action) => {
             const getActionDescription = (action: string) => {
               switch (action) {
                 case 'deposit':
@@ -127,6 +235,8 @@ export function Vault() {
                   return 'Pay back the money you borrowed';
                 case 'withdraw':
                   return 'Take out extra Bitcoin';
+                case 'send':
+                  return 'Send Bitcoin to any address';
                 default:
                   return '';
               }
@@ -152,15 +262,141 @@ export function Vault() {
         <div className="glass p-6 rounded-2xl border border-white/10">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-white/60 mb-1">Total Collateral Value</p>
-              <p className="text-3xl font-bold">${btcValue.toLocaleString()}</p>
+              <p className="text-sm text-white/60 mb-1">MUSD Balance</p>
+              <p className="text-3xl font-bold">{musdBalance} MUSD</p>
             </div>
             <div className="text-right">
-              <p className="text-sm text-white/60 mb-1">Available to Borrow</p>
-              <p className="text-2xl font-bold text-green-400">${(btcValue * 0.5 - musdBorrowed).toLocaleString()}</p>
+              <p className="text-sm text-white/60 mb-1">Interest Rate</p>
+              <p className="text-2xl font-bold text-green-400">{vaultData?.interestRate || 0}%</p>
             </div>
           </div>
         </div>
+
+        {/* Error Display */}
+        {error && (
+          <div className="glass p-4 rounded-2xl border border-red-500/20 bg-red-500/10">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-5 h-5 text-red-400" />
+              <p className="text-red-400">{error}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Action-Specific Success Popups */}
+        {isDepositSuccess && (
+          <div className="glass p-4 rounded-2xl border border-green-500/20 bg-green-500/10">
+            <div className="flex items-center gap-2">
+              <CheckCircle className="w-5 h-5 text-green-400" />
+              <div>
+                <p className="text-green-400 font-semibold">BTC deposited successfully!</p>
+                <p className="text-green-300 text-sm">Collateral: {actionAmount} BTC</p>
+                {depositHash && (
+                  <a 
+                    href={`https://explorer.test.mezo.org/tx/${depositHash}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-green-300 text-xs underline hover:text-green-200"
+                  >
+                    View on Explorer
+                  </a>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {isBorrowSuccess && (
+          <div className="glass p-4 rounded-2xl border border-green-500/20 bg-green-500/10">
+            <div className="flex items-center gap-2">
+              <CheckCircle className="w-5 h-5 text-green-400" />
+              <div>
+                <p className="text-green-400 font-semibold">MUSD borrowed successfully!</p>
+                <p className="text-green-300 text-sm">{actionAmount} MUSD sent to your wallet</p>
+                {borrowHash && (
+                  <a 
+                    href={`https://explorer.test.mezo.org/tx/${borrowHash}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-green-300 text-xs underline hover:text-green-200"
+                  >
+                    View on Explorer
+                  </a>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {isRepaySuccess && (
+          <div className="glass p-4 rounded-2xl border border-green-500/20 bg-green-500/10">
+            <div className="flex items-center gap-2">
+              <CheckCircle className="w-5 h-5 text-green-400" />
+              <div>
+                <p className="text-green-400 font-semibold">Loan repaid successfully!</p>
+                <p className="text-green-300 text-sm">Your collateral is now available.</p>
+                <Button
+                  onClick={() => setActiveAction('withdraw')}
+                  className="mt-2 bg-green-500 hover:bg-green-600 text-white text-xs px-3 py-1"
+                >
+                  Withdraw Now
+                </Button>
+                {repayHash && (
+                  <a 
+                    href={`https://explorer.test.mezo.org/tx/${repayHash}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-green-300 text-xs underline hover:text-green-200 block mt-1"
+                  >
+                    View on Explorer
+                  </a>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {isWithdrawSuccess && (
+          <div className="glass p-4 rounded-2xl border border-green-500/20 bg-green-500/10">
+            <div className="flex items-center gap-2">
+              <CheckCircle className="w-5 h-5 text-green-400" />
+              <div>
+                <p className="text-green-400 font-semibold">BTC withdrawn successfully!</p>
+                <p className="text-green-300 text-sm">{actionAmount} BTC sent to your wallet</p>
+                {withdrawHash && (
+                  <a 
+                    href={`https://explorer.test.mezo.org/tx/${withdrawHash}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-green-300 text-xs underline hover:text-green-200"
+                  >
+                    View on Explorer
+                  </a>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Send Success Popup - using sendBitcoinHash */}
+        {sendBitcoinHash && (
+          <div className="glass p-4 rounded-2xl border border-green-500/20 bg-green-500/10">
+            <div className="flex items-center gap-2">
+              <CheckCircle className="w-5 h-5 text-green-400" />
+              <div>
+                <p className="text-green-400 font-semibold">BTC sent successfully!</p>
+                <p className="text-green-300 text-sm">Sent {actionAmount} BTC to {recipientAddress.slice(0, 6)}...{recipientAddress.slice(-4)}</p>
+                <a 
+                  href={`https://explorer.test.mezo.org/tx/${sendBitcoinHash}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-green-300 text-xs underline hover:text-green-200"
+                >
+                  View on Explorer
+                </a>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Action Modal */}
@@ -170,9 +406,29 @@ export function Vault() {
             <h2 className="text-2xl font-bold mb-6 font-title">{getActionTitle()}</h2>
 
             <div className="space-y-4 mb-6">
+              {/* Recipient Address Field for Send Action */}
+              {activeAction === 'send' && (
+                <div>
+                  <Label htmlFor="recipientAddress" className="text-sm text-white/70 mb-2 block">
+                    Recipient Address
+                  </Label>
+                  <Input
+                    id="recipientAddress"
+                    type="text"
+                    value={recipientAddress}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setRecipientAddress(e.target.value)}
+                    placeholder="0x..."
+                    className="glass border-white/20 focus:border-white/40 text-white placeholder:text-white/40"
+                  />
+                  <p className="text-xs text-white/50 mt-1">
+                    Enter a valid Mezo testnet address
+                  </p>
+                </div>
+              )}
+
               <div>
                 <Label htmlFor="actionAmount" className="text-sm text-white/70 mb-2 block">
-                  Amount (MUSD)
+                  {getAmountLabel()}
                 </Label>
                 <Input
                   id="actionAmount"
@@ -182,7 +438,7 @@ export function Vault() {
                   placeholder="0.00"
                   className="glass border-white/20 focus:border-white/40 text-white placeholder:text-white/40"
                 />
-                {actionAmount && (
+                {actionAmount && (activeAction === 'borrow' || activeAction === 'repay') && (
                   <p className="text-xs text-white/50 mt-1">
                     ≈ {parseFloat(actionAmount || '0') * 1.02} USD
                   </p>
@@ -197,8 +453,8 @@ export function Vault() {
               </div>
 
               <div className="glass border-white/20 px-4 py-3 rounded-lg">
-                <p className="text-xs text-white/60 mb-1">Current Balance</p>
-                <p className="text-sm text-white/80 font-mono">{musdBorrowed.toLocaleString()} MUSD</p>
+                <p className="text-xs text-white/60 mb-1">{getBalanceInfo().label}</p>
+                <p className="text-sm text-white/80 font-mono">{getBalanceInfo().value}</p>
               </div>
             </div>
 
@@ -212,10 +468,21 @@ export function Vault() {
               </Button>
               <Button
                 onClick={handleAction}
-                disabled={!actionAmount}
+                disabled={!actionAmount || isLoading || (activeAction === 'send' && !recipientAddress)}
                 className="flex-1 bg-orange-400 hover:bg-orange-500 text-white border-0"
               >
-                Confirm {getActionTitle()}
+                {isLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    {activeAction === 'deposit' && 'Confirming deposit...'}
+                    {activeAction === 'borrow' && 'Borrowing MUSD...'}
+                    {activeAction === 'repay' && 'Repaying loan...'}
+                    {activeAction === 'withdraw' && 'Withdrawing BTC...'}
+                    {activeAction === 'send' && 'Sending BTC...'}
+                  </>
+                ) : (
+                  `Confirm ${getActionTitle()}`
+                )}
               </Button>
             </div>
           </div>
