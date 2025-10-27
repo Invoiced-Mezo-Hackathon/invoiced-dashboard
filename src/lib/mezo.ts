@@ -22,12 +22,12 @@ export interface MezoTransaction {
 // Mezo Testnet Contract Addresses
 // These are the actual deployed addresses on Mezo testnet
 export const MEZO_CONTRACTS = {
-  MUSD_TOKEN: '0x118917a40FAF1CD7a13dB0Ef56C86De7973Ac503', // MUSD Token (verified)
+  MUSD_TOKEN: '0x7654b902c802438D55dd8C242e7d8535506D89BD', // MUSD Token (verified)
   BORROW_MANAGER: '0x1234567890123456789012345678901234567890', // Placeholder - will be updated after deployment
   STABILITY_POOL: '0x1234567890123456789012345678901234567890', // Placeholder - will be updated after deployment
   TROVE_MANAGER: '0x1234567890123456789012345678901234567890', // Placeholder - will be updated after deployment
-  MEZO_VAULT: '0x1234567890123456789012345678901234567890', // Our custom vault contract - will be updated after deployment
-  INVOICE_CONTRACT: '0x1234567890123456789012345678901234567890', // Invoice contract - placeholder address
+  MEZO_VAULT: '0x773530c39Ff8B8DD8ad961086EA9E9DBB9B84BfF', // Our custom vault contract - deployed ✅
+  INVOICE_CONTRACT: '0xEAB6C13EFCFaD2e40EA72F66d1AAA6058B7DDEE9', // Invoice contract - deployed ✅
 };
 
 // Contract ABIs for Mezo integration
@@ -79,6 +79,9 @@ export const INVOICE_CONTRACT_ABI = [
   "function getTotalRevenue(address _user) view returns (uint256)",
   "function getPendingAmount(address _user) view returns (uint256)",
   "function getUserInvoiceCount(address _user) view returns (uint256)",
+  "function getAllInvoices() view returns (tuple(uint256 id, address creator, address recipient, uint256 amount, string description, string bitcoinAddress, string clientName, string clientCode, bool paid, bool cancelled, uint256 createdAt, uint256 paidAt)[])",
+  "function getInvoicesByStatus(bool includePaid, bool includeCancelled) view returns (uint256[])",
+  "function invoiceCount() view returns (uint256)",
   // Events
   "event InvoiceCreated(uint256 indexed id, address indexed creator, address indexed recipient, uint256 amount, string bitcoinAddress, string clientName)",
   "event InvoicePaid(uint256 indexed id, uint256 amount, uint256 timestamp)",

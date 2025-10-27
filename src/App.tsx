@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { useAccount } from 'wagmi';
-import { WalletProvider } from '@/contexts/WalletContext';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { Header } from '@/components/layout/Header';
 import { NetworkSwitchModal } from '@/components/ui/NetworkSwitchModal';
@@ -11,29 +10,18 @@ import { Vault } from '@/pages/Vault';
 import { Settings } from '@/pages/Settings';
 import { useWalletUtils } from '@/hooks/useWalletUtils';
 import { useNetworkNotifications } from '@/hooks/useNetworkNotifications';
-
-interface Invoice {
-  id: string;
-  clientName: string;
-  clientCode: string;
-  details: string;
-  amount: number;
-  currency: string;
-  musdAmount: number;
-  status: 'pending' | 'paid' | 'cancelled';
-  createdAt: string;
-  wallet: string;
-  bitcoinAddress?: string;
-}
+import { useInvoiceContract } from '@/hooks/useInvoiceContract';
 
 function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [showNetworkModal, setShowNetworkModal] = useState(false);
   const [hasShownNetworkPrompt, setHasShownNetworkPrompt] = useState(false);
 
   const { isConnected, chainId } = useAccount();
   const { isMezoTestnet } = useWalletUtils();
+  
+  // Get invoices from blockchain
+  const { invoices, stats } = useInvoiceContract();
   
   // Enable network notifications
   useNetworkNotifications();
@@ -53,24 +41,12 @@ function App() {
     }
   }, [isConnected]);
 
-  const handleInvoiceCreated = (invoice: Invoice) => {
-    setInvoices((prev) => [invoice, ...prev]);
-  };
-
-  const handleUpdateInvoice = (id: string, updates: Partial<Invoice>) => {
-    setInvoices((prev) =>
-      prev.map((invoice) =>
-        invoice.id === id ? { ...invoice, ...updates } : invoice
-      )
-    );
-  };
-
   const renderContent = () => {
     switch (activeTab) {
       case 'dashboard':
-        return <Dashboard onNavigate={setActiveTab} invoices={invoices} />;
+        return <Dashboard onNavigate={setActiveTab} invoices={invoices} stats={stats} />;
       case 'invoices':
-        return <Invoices invoices={invoices} onUpdateInvoice={handleUpdateInvoice} onInvoiceCreated={handleInvoiceCreated} />;                                                                          
+        return <Invoices invoices={invoices} />;
       case 'payments':
         return <Payments invoices={invoices} />;
       case 'vault':
@@ -78,28 +54,31 @@ function App() {
       case 'settings':
         return <Settings />;
       default:
-        return <Dashboard onNavigate={setActiveTab} invoices={invoices} />;
+        return <Dashboard onNavigate={setActiveTab} invoices={invoices} stats={stats} />;
     }
   };
 
   return (
-    <WalletProvider>
-      <div className="flex h-screen bg-background text-foreground overflow-hidden">                                                                             
-        {/* Mobile: hide sidebar by default, show via menu button */}
-        <div className="hidden md:block">
-          <Sidebar 
-            activeTab={activeTab} 
-            onTabChange={setActiveTab}
-            onShowNetworkModal={() => setShowNetworkModal(true)}
-          />
-        </div>
-        <div className="flex-1 flex flex-col md:flex-row overflow-hidden relative">                                                                             
-          <div className="flex-1">
-            {renderContent()}
-          </div>
+    <>
+      <div className="flex h-screen bg-background text-foreground overflow-hidden">
+        {/* Sidebar */}
+        <Sidebar 
+          activeTab={activeTab} 
+          onTabChange={setActiveTab}
+          onShowNetworkModal={() => setShowNetworkModal(true)}
+        />
+        
+        {/* Main Content Area */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Header */}
           <Header 
             onShowNetworkModal={() => setShowNetworkModal(true)}
           />
+          
+          {/* Page Content */}
+          <div className="flex-1 overflow-auto">
+            {renderContent()}
+          </div>
         </div>
       </div>
       
@@ -108,7 +87,7 @@ function App() {
         isOpen={showNetworkModal}
         onClose={() => setShowNetworkModal(false)}
       />
-    </WalletProvider>
+    </>
   );
 }
 

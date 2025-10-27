@@ -5,20 +5,29 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
+// Interface for MUSDToken with mint/burn capabilities
+interface IMUSDToken {
+    function mint(address to, uint256 amount) external;
+    function burn(address from, uint256 amount) external;
+}
+
 /**
  * @title MezoVaultContract
  * @dev A vault contract that integrates with Mezo's MUSD system
  * This contract allows users to deposit BTC collateral and borrow MUSD
  */
 contract MezoVaultContract is ReentrancyGuard, Ownable {
-    // MUSD token contract address (Mezo testnet)
-    address public constant MUSD_TOKEN = 0x118917a40FAF1CD7a13dB0Ef56C86De7973Ac503;
+    // MUSD token contract address (will be set during deployment)
+    address public musdToken;
     
     // Minimum collateral ratio (110%)
     uint256 public constant MIN_COLLATERAL_RATIO = 110;
     
     // Interest rate (2.5% annually)
     uint256 public constant INTEREST_RATE = 250; // 2.5% in basis points
+    
+    // BTC price in USD (for demo purposes, set to $50,000)
+    uint256 public constant BTC_PRICE_USD = 50000;
     
     // User vault data
     struct Vault {
@@ -42,7 +51,9 @@ contract MezoVaultContract is ReentrancyGuard, Ownable {
     event CollateralWithdrawn(address indexed user, uint256 amount);
     event VaultLiquidated(address indexed user, uint256 collateralAmount, uint256 debtAmount);
     
-    constructor() Ownable(msg.sender) {}
+    constructor(address _musdToken) Ownable(msg.sender) {
+        musdToken = _musdToken;
+    }
     
     /**
      * @dev Deposit BTC collateral to create or increase vault
@@ -86,8 +97,8 @@ contract MezoVaultContract is ReentrancyGuard, Ownable {
         vault.borrowedAmount = newBorrowedAmount;
         totalBorrowed += amount;
         
-        // Transfer MUSD to user
-        IERC20(MUSD_TOKEN).transfer(msg.sender, amount);
+        // Mint MUSD and send to user
+        IMUSDToken(musdToken).mint(msg.sender, amount);
         
         emit MUSDBorrowed(msg.sender, amount);
     }
@@ -109,8 +120,9 @@ contract MezoVaultContract is ReentrancyGuard, Ownable {
         vault.borrowedAmount -= actualRepayAmount;
         totalBorrowed -= actualRepayAmount;
         
-        // Transfer MUSD from user
-        IERC20(MUSD_TOKEN).transferFrom(msg.sender, address(this), actualRepayAmount);
+        // First approve if needed, then burn the MUSD
+        IERC20(musdToken).transferFrom(msg.sender, address(this), actualRepayAmount);
+        IMUSDToken(musdToken).burn(address(this), actualRepayAmount);
         
         emit MUSDRepaid(msg.sender, actualRepayAmount);
     }
@@ -128,11 +140,14 @@ contract MezoVaultContract is ReentrancyGuard, Ownable {
         _updateInterest(msg.sender);
         
         uint256 newCollateralAmount = vault.collateralAmount - amount;
-        require(newCollateralAmount >= vault.borrowedAmount, "Cannot withdraw all collateral with debt");
+        require(newCollateralAmount >= 0, "Amount exceeds collateral");
         
         // Check if withdrawal maintains healthy collateral ratio
         if (vault.borrowedAmount > 0) {
             require(_isHealthyCollateralRatio(newCollateralAmount, vault.borrowedAmount), "Insufficient collateral ratio");
+        } else {
+            // If no debt, can withdraw all (but check for underflow)
+            require(vault.collateralAmount >= amount, "Insufficient collateral");
         }
         
         vault.collateralAmount = newCollateralAmount;
@@ -153,8 +168,10 @@ contract MezoVaultContract is ReentrancyGuard, Ownable {
         Vault memory vault = vaults[user];
         if (vault.borrowedAmount == 0) return 0;
         
-        // Assuming 1 BTC = $50,000 for calculation
-        uint256 collateralValue = vault.collateralAmount * 50000;
+        // Convert collateral to USD value (assuming 1 wei = 1 gwei for price calculation)
+        // We need to scale the price calculation properly
+        // collateralAmount is in wei, we need to calculate: (BTC * BTC_PRICE) / MUSD
+        uint256 collateralValue = (vault.collateralAmount * BTC_PRICE_USD) / 1e18;
         return (collateralValue * 10000) / vault.borrowedAmount;
     }
     
@@ -214,11 +231,11 @@ contract MezoVaultContract is ReentrancyGuard, Ownable {
      * @param borrowedAmount Borrowed amount
      * @return True if healthy
      */
-    function _isHealthyCollateralRatio(uint256 collateralAmount, uint256 borrowedAmount) internal pure returns (bool) {
+    function _isHealthyCollateralRatio(uint256 collateralAmount, uint256 borrowedAmount) internal view returns (bool) {
         if (borrowedAmount == 0) return true;
         
-        // Assuming 1 BTC = $50,000 for calculation
-        uint256 collateralValue = collateralAmount * 50000;
+        // Convert collateral to USD value
+        uint256 collateralValue = (collateralAmount * BTC_PRICE_USD) / 1e18;
         uint256 collateralRatio = (collateralValue * 10000) / borrowedAmount;
         
         return collateralRatio >= MIN_COLLATERAL_RATIO;

@@ -11,8 +11,8 @@ export interface BoarConfig {
 
 export const BOAR_CONFIG: BoarConfig = {
   apiKey: import.meta.env.VITE_BOAR_API_KEY || 'WfNc1YhD65vUESGOdWFMCGrvl6S5FMgg',
-  wsUrl: import.meta.env.VITE_BOAR_WS_URL || 'wss://api.boar.network/ws',
-  httpUrl: import.meta.env.VITE_BOAR_HTTP_URL || 'https://api.boar.network/api',
+  wsUrl: import.meta.env.VITE_BOAR_WS_URL || 'wss://rpc.boar.network/ws', // Updated URL
+  httpUrl: import.meta.env.VITE_BOAR_HTTP_URL || 'https://rpc.boar.network/api', // Updated URL
   reconnectInterval: 5000, // 5 seconds
   maxReconnectAttempts: 10,
 };

@@ -44,15 +44,36 @@ class PaymentMonitorService {
   private connect(): void {
     try {
       console.log('🔌 Connecting to Boar Network WebSocket...');
+      console.log('📡 Using API Key:', BOAR_CONFIG.apiKey);
+      console.log('🌐 WebSocket URL:', BOAR_CONFIG.wsUrl);
       
-      // For now, simulate connection for demo purposes
-      // In production, you would use the actual Boar WebSocket URL
-      console.log('⚠️ Boar WebSocket connection simulated for demo');
-      this.isConnected = true;
-      this.notifyConnectionStatus('connected');
+      // Connect to real Boar Network WebSocket
+      this.ws = new WebSocket(`${BOAR_CONFIG.wsUrl}?apiKey=${BOAR_CONFIG.apiKey}`);
       
-      // TODO: Replace with actual WebSocket connection when Boar endpoints are available
-      // this.ws = new WebSocket(`${BOAR_CONFIG.wsUrl}?apiKey=${BOAR_CONFIG.apiKey}`);
+      this.ws.onopen = () => {
+        console.log('✅ Connected to Boar Network WebSocket');
+        this.isConnected = true;
+        this.reconnectAttempts = 0;
+        this.startHeartbeat();
+        this.resubscribeAll();
+        this.notifyConnectionStatus('connected');
+      };
+      
+      this.ws.onmessage = (event) => {
+        this.handleMessage(event.data);
+      };
+      
+      this.ws.onclose = () => {
+        console.log('🔌 Boar WebSocket connection closed');
+        this.isConnected = false;
+        this.stopHeartbeat();
+        this.scheduleReconnect();
+      };
+      
+      this.ws.onerror = (error) => {
+        console.error('🚨 Boar WebSocket error:', error);
+        this.notifyError(new BoarError('WebSocket error', BOAR_ERRORS.CONNECTION_FAILED, error));
+      };
       
     } catch (error) {
       console.error('🚨 Failed to connect to Boar Network:', error);
@@ -145,35 +166,12 @@ class PaymentMonitorService {
     
     if (this.isConnected && this.ws) {
       this.sendSubscription(subscription.address);
+    } else {
+      // If not connected yet, it will resubscribe when connection is established
+      console.log('⏳ Waiting for WebSocket connection to subscribe...');
     }
-    
-    // For demo purposes, simulate a payment after 5 seconds
-    // Remove this in production
-    setTimeout(() => {
-      this.simulatePayment(subscription);
-    }, 5000);
   }
 
-  // Simulate payment for demo purposes
-  private simulatePayment(subscription: AddressSubscription): void {
-    console.log('🎭 Simulating payment for demo...');
-    
-    const mockTransaction: StoredTransaction = {
-      txHash: `0x${Math.random().toString(16).substr(2, 64)}`,
-      invoiceId: subscription.invoiceId,
-      from: '0x1234567890123456789012345678901234567890',
-      to: subscription.address,
-      amount: subscription.expectedAmount || '1000000000000000000', // 1 BTC in wei
-      blockNumber: 12345,
-      timestamp: Math.floor(Date.now() / 1000),
-      confirmations: 1,
-      status: 'confirmed',
-      detectedAt: Date.now(),
-    };
-    
-    transactionStorage.addTransaction(mockTransaction);
-    this.notifyPaymentDetected(subscription.invoiceId, mockTransaction);
-  }
 
   // Unsubscribe from monitoring an address
   unsubscribeFromAddress(address: string): void {

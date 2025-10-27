@@ -1,51 +1,72 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAccount } from 'wagmi';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { User, Wallet, AlertTriangle } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import { User, Wallet, AlertTriangle, Download, Trash2, SettingsIcon, Bell } from 'lucide-react';
 import { useWalletUtils } from '@/hooks/useWalletUtils';
 import { toast } from 'react-hot-toast';
+import { SettingsSection } from '@/components/settings/SettingsSection';
+import { AutoSaveIndicator } from '@/components/settings/AutoSaveIndicator';
 
 interface UserSettings {
   name: string;
-  avatar: string; // color: 'blue' | 'green' | 'purple' | 'orange' | 'pink' | 'teal'
+  avatar: string;
   currency: string;
+  businessName?: string;
+  defaultPaymentTerms: number;
+  defaultTaxRate: number;
+  notificationsEnabled: boolean;
+  lastBackupDate?: string;
 }
-
-const AVATAR_COLORS = [
-  { id: 'blue', bg: 'bg-blue-500', label: 'Blue' },
-  { id: 'green', bg: 'bg-green-500', label: 'Green' },
-  { id: 'purple', bg: 'bg-purple-500', label: 'Purple' },
-  { id: 'orange', bg: 'bg-orange-500', label: 'Orange' },
-  { id: 'pink', bg: 'bg-pink-500', label: 'Pink' },
-  { id: 'teal', bg: 'bg-teal-500', label: 'Teal' },
-];
 
 export function Settings() {
   const { address, isConnected } = useAccount();
   const { formatAddress, getNetworkName, chainId } = useWalletUtils();
   
   const [name, setName] = useState('');
-  const [avatar, setAvatar] = useState('blue');
+  const [avatar, setAvatar] = useState('gradient');
   const [currency, setCurrency] = useState('USD');
+  const [businessName, setBusinessName] = useState('');
+  const [defaultPaymentTerms, setDefaultPaymentTerms] = useState(30);
+  const [defaultTaxRate, setDefaultTaxRate] = useState(0);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const debounceTimer = useRef<NodeJS.Timeout | null>(null);
 
   // Load settings when wallet connects
   useEffect(() => {
     if (address) {
       const savedSettings = loadSettings(address);
       if (savedSettings) {
-        setName(savedSettings.name);
-        setAvatar(savedSettings.avatar);
-        setCurrency(savedSettings.currency);
+        setName(savedSettings.name || '');
+        setAvatar(savedSettings.avatar || 'gradient');
+        setCurrency(savedSettings.currency || 'USD');
+        setBusinessName(savedSettings.businessName || '');
+        setDefaultPaymentTerms(savedSettings.defaultPaymentTerms || 30);
+        setDefaultTaxRate(savedSettings.defaultTaxRate || 0);
+        setNotificationsEnabled(savedSettings.notificationsEnabled || false);
       }
     } else {
       // Clear settings when wallet disconnects
       setName('');
-      setAvatar('blue');
+      setAvatar('gradient');
       setCurrency('USD');
+      setBusinessName('');
+      setDefaultPaymentTerms(30);
+      setDefaultTaxRate(0);
+      setNotificationsEnabled(false);
     }
   }, [address]);
+
+  // Request notification permission when enabled
+  useEffect(() => {
+    if (notificationsEnabled && 'Notification' in window) {
+      if (Notification.permission === 'default') {
+        Notification.requestPermission();
+      }
+    }
+  }, [notificationsEnabled]);
 
   const loadSettings = (walletAddress: string): UserSettings | null => {
     try {
@@ -65,20 +86,98 @@ export function Settings() {
     }
   };
 
-  const handleSave = () => {
-    if (address) {
+  const autoSave = useCallback(() => {
+    if (!address) return;
+
+    setSaveStatus('saving');
+
+    if (debounceTimer.current) {
+      clearTimeout(debounceTimer.current);
+    }
+
+    debounceTimer.current = setTimeout(() => {
       const settings: UserSettings = {
         name: name.trim(),
         avatar,
         currency,
+        businessName: businessName.trim(),
+        defaultPaymentTerms,
+        defaultTaxRate,
+        notificationsEnabled,
       };
       saveSettings(address, settings);
-      
-      // Show success toast notification
-      toast.success('Settings saved successfully! 🎉', {
-        duration: 3000,
-        icon: '✅',
-      });
+      setSaveStatus('saved');
+
+      setTimeout(() => {
+        setSaveStatus('idle');
+      }, 2000);
+    }, 500);
+  }, [address, name, avatar, currency, businessName, defaultPaymentTerms, defaultTaxRate, notificationsEnabled]);
+
+  // Auto-save when settings change
+  useEffect(() => {
+    if (address) {
+      autoSave();
+    }
+    return () => {
+      if (debounceTimer.current) {
+        clearTimeout(debounceTimer.current);
+      }
+    };
+  }, [address, name, avatar, currency, businessName, defaultPaymentTerms, defaultTaxRate, notificationsEnabled]);
+
+  const handleExport = () => {
+    if (!address) return;
+
+    try {
+      // Get all invoices
+      const invoices = localStorage.getItem(`invoiced_invoices_${address}`);
+      const settings = localStorage.getItem(`invoiced_settings_${address}`);
+
+      const data = {
+        exportedAt: new Date().toISOString(),
+        walletAddress: address,
+        settings: settings ? JSON.parse(settings) : null,
+        invoices: invoices ? JSON.parse(invoices) : null,
+      };
+
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `invoiced-backup-${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      // Update last backup date
+      const currentSettings = loadSettings(address);
+      if (currentSettings) {
+        currentSettings.lastBackupDate = new Date().toISOString();
+        saveSettings(address, currentSettings);
+      }
+
+      toast.success('Data exported successfully!');
+    } catch (error) {
+      console.error('Export failed:', error);
+      toast.error('Failed to export data');
+    }
+  };
+
+  const handleClearData = () => {
+    if (!window.confirm('Are you sure you want to clear all settings? This cannot be undone.')) {
+      return;
+    }
+
+    if (address) {
+      localStorage.removeItem(`invoiced_settings_${address}`);
+      setName('');
+      setBusinessName('');
+      setDefaultPaymentTerms(30);
+      setDefaultTaxRate(0);
+      setNotificationsEnabled(false);
+      toast.success('Settings cleared');
     }
   };
 
@@ -89,48 +188,83 @@ export function Settings() {
     return (words[0][0] + words[words.length - 1][0]).toUpperCase();
   };
 
+  if (!isConnected) {
+    return (
+      <div className="flex-1 h-screen overflow-y-auto p-8">
+        <div className="max-w-2xl mx-auto mt-20">
+          <div className="glass-card p-12 rounded-2xl border border-border/20 text-center">
+            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 flex items-center justify-center">
+              <Wallet className="w-8 h-8 text-white" />
+            </div>
+            <h2 className="text-2xl font-bold font-title mb-2">Connect Your Wallet</h2>
+            <p className="text-foreground/60 mb-6">
+              Please connect your wallet to access settings and customize your profile
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex-1 h-screen overflow-y-auto p-8">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-2 font-title">Settings</h1>
-        <p className="text-white/60">Manage your profile and preferences</p>
+    <div className="flex-1 h-screen overflow-y-auto p-4 sm:p-6 lg:p-8">
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold mb-2 font-title">Settings</h1>
+          <p className="text-xs sm:text-sm lg:text-base text-foreground/60">Manage your profile and preferences</p>
+        </div>
+        <AutoSaveIndicator status={saveStatus} />
       </div>
 
-      <div className="max-w-2xl mx-auto space-y-6">
-        {/* Profile Section */}
-        <div className="glass-card p-6 rounded-2xl">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="p-2 rounded-lg bg-blue-500/10">
-              <User className="w-5 h-5 text-blue-400" />
+      <div className="max-w-3xl mx-auto space-y-4">
+        {/* Wallet Info - Now First */}
+        <SettingsSection
+          title="Wallet"
+          description="Your connected wallet information"
+          icon={Wallet}
+          iconBgColor="bg-green-500/10"
+          iconColor="text-green-400"
+        >
+          <div className="space-y-4">
+            <div className="flex items-center justify-between p-4 rounded-xl bg-muted/50 border border-border/20">
+              <div>
+                <p className="text-sm text-foreground/60 mb-1">Connected Wallet</p>
+                <p className="font-mono text-sm">{formatAddress(address!)}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-green-400"></div>
+                <span className="text-xs text-green-400">Connected</span>
+              </div>
             </div>
-            <h2 className="text-xl font-semibold font-title">Profile</h2>
+            <div className="flex items-center justify-between p-4 rounded-xl bg-muted/50 border border-border/20">
+              <div>
+                <p className="text-sm text-foreground/60 mb-1">Network</p>
+                <p className="text-sm font-medium">{getNetworkName(chainId)}</p>
+              </div>
+            </div>
           </div>
-          
-          <div className="space-y-6">
-            {/* Avatar Selection */}
-            <div>
-              <Label className="text-sm text-foreground/70 mb-3 block">
-                Choose Avatar
-              </Label>
-              <div className="flex gap-3">
-                {AVATAR_COLORS.map((color) => (
-                  <button
-                    key={color.id}
-                    onClick={() => setAvatar(color.id)}
-                    className={`w-12 h-12 rounded-full ${color.bg} flex items-center justify-center text-white font-semibold text-sm transition-all duration-200 ${
-                      avatar === color.id 
-                        ? 'ring-2 ring-white ring-offset-2 ring-offset-background scale-110' 
-                        : 'hover:scale-105'
-                    }`}
-                    title={color.label}
-                  >
-                    {getInitials(name)}
-                  </button>
-                ))}
+        </SettingsSection>
+
+        {/* Profile Section */}
+        <SettingsSection
+          title="Profile"
+          description="Customize your identity"
+          icon={User}
+          iconBgColor="bg-blue-500/10"
+          iconColor="text-blue-400"
+        >
+          <div className="space-y-4">
+            {/* Avatar Preview */}
+            <div className="flex items-center gap-4 pb-4 border-b border-border/20">
+              <div className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-xl font-bold shadow-lg">
+                {getInitials(name || businessName)}
+              </div>
+              <div>
+                <p className="text-sm font-medium">{name || 'User'}</p>
+                <p className="text-xs text-foreground/60">{businessName || 'No business name set'}</p>
               </div>
             </div>
 
-            {/* Display Name */}
             <div>
               <Label htmlFor="name" className="text-sm text-foreground/70 mb-2 block">
                 Display Name
@@ -141,102 +275,168 @@ export function Settings() {
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)}
                 className="glass border-border/20 focus:border-border/40"
                 placeholder="Enter your display name"
+                disabled={!isConnected}
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="businessName" className="text-sm text-foreground/70 mb-2 block">
+                Business/Company Name (Optional)
+              </Label>
+              <Input
+                id="businessName"
+                value={businessName}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setBusinessName(e.target.value)}
+                className="glass border-border/20 focus:border-border/40"
+                placeholder="Enter business name"
+                disabled={!isConnected}
               />
             </div>
           </div>
-        </div>
+        </SettingsSection>
 
-        {/* Wallet Section */}
-        <div className="glass-card p-6 rounded-2xl">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="p-2 rounded-lg bg-green-500/10">
-              <Wallet className="w-5 h-5 text-green-400" />
-            </div>
-            <h2 className="text-xl font-semibold font-title">Wallet</h2>
-          </div>
-          
-          <div className="space-y-4">
-            {isConnected && address ? (
-              <>
-                <div className="flex items-center justify-between p-4 rounded-xl bg-muted/50 border border-border/20">
-                  <div>
-                    <p className="text-sm text-foreground/60 mb-1">Connected Wallet</p>
-                    <p className="font-mono text-sm">{formatAddress(address)}</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full bg-green-400"></div>
-                    <span className="text-xs text-green-400">Connected</span>
-                  </div>
-                </div>
-                <div className="flex items-center justify-between p-4 rounded-xl bg-muted/50 border border-border/20">
-                  <div>
-                    <p className="text-sm text-foreground/60 mb-1">Network</p>
-                    <p className="text-sm font-medium">{getNetworkName(chainId)}</p>
-                  </div>
-                </div>
-              </>
-            ) : (
-              <div className="p-4 rounded-xl bg-muted/50 border border-border/20 text-center">
-                <p className="text-sm text-foreground/60">No wallet connected</p>
-                <p className="text-xs text-foreground/40 mt-1">Connect your wallet to view settings</p>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Preferences Section */}
-        <div className="glass-card p-6 rounded-2xl">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="p-2 rounded-lg bg-purple-500/10">
-              <User className="w-5 h-5 text-purple-400" />
-            </div>
-            <h2 className="text-xl font-semibold font-title">Preferences</h2>
-          </div>
-          
-          <div>
-            <Label htmlFor="currency" className="text-sm text-foreground/70 mb-2 block">
-              Default Currency
-            </Label>
-            <select
-              id="currency"
-              value={currency}
-              onChange={(e) => setCurrency(e.target.value)}
-              className="w-full p-3 rounded-lg glass border border-border/20 focus:border-border/40 bg-background text-foreground"
-            >
-              <option value="USD">USD</option>
-              <option value="EUR">EUR</option>
-              <option value="GBP">GBP</option>
-              <option value="BTC">BTC</option>
-              <option value="MUSD">MUSD</option>
-            </select>
-          </div>
-        </div>
-
-        {/* Security Warning */}
-        <div className="glass-card p-6 rounded-2xl border border-amber-500/20 bg-amber-500/5">
-          <div className="flex items-start gap-3">
-            <div className="p-2 rounded-lg bg-amber-500/10">
-              <AlertTriangle className="w-5 h-5 text-amber-400" />
-            </div>
+        {/* Invoice Defaults */}
+        <SettingsSection
+          title="Invoice Defaults"
+          description="Set default values for new invoices"
+          icon={SettingsIcon}
+          iconBgColor="bg-purple-500/10"
+          iconColor="text-purple-400"
+        >
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <h3 className="text-lg font-semibold font-title text-amber-400 mb-2">Security Notice</h3>
-              <p className="text-sm text-foreground/80 leading-relaxed">
-                Always use secure wallets and keep your private keys safe. Never share your seed phrase with anyone. 
-                Invoiced cannot recover lost funds. Your wallet security is your responsibility.
-              </p>
+              <Label htmlFor="paymentTerms" className="text-sm text-foreground/70 mb-2 block">
+                Default Payment Terms (days)
+              </Label>
+              <select
+                id="paymentTerms"
+                value={defaultPaymentTerms}
+                onChange={(e) => setDefaultPaymentTerms(Number(e.target.value))}
+                className="w-full p-3 rounded-lg glass border border-border/20 focus:border-border/40 bg-background text-foreground"
+                disabled={!isConnected}
+              >
+                <option value="7">7 days</option>
+                <option value="14">14 days</option>
+                <option value="30">30 days</option>
+                <option value="60">60 days</option>
+                <option value="90">90 days</option>
+              </select>
+            </div>
+
+            <div>
+              <Label htmlFor="taxRate" className="text-sm text-foreground/70 mb-2 block">
+                Default Tax Rate (%)
+              </Label>
+              <Input
+                id="taxRate"
+                type="number"
+                min="0"
+                max="100"
+                step="0.1"
+                value={defaultTaxRate}
+                onChange={(e) => setDefaultTaxRate(parseFloat(e.target.value) || 0)}
+                className="glass border-border/20 focus:border-border/40"
+                placeholder="0"
+                disabled={!isConnected}
+              />
             </div>
           </div>
-        </div>
+        </SettingsSection>
 
-        {/* Save Button */}
-        <div className="flex justify-center pt-4">
-          <Button
-            onClick={handleSave}
-            disabled={!isConnected}
-            className="glass-hover border border-border/20 h-12 px-12 text-base font-medium bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Save Changes
-          </Button>
+        {/* Preferences */}
+        <SettingsSection
+          title="Preferences"
+          description="Configure your app preferences"
+          icon={Bell}
+          iconBgColor="bg-green-500/10"
+          iconColor="text-green-400"
+        >
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="currency" className="text-sm text-foreground/70 mb-2 block">
+                Default Currency
+              </Label>
+              <select
+                id="currency"
+                value={currency}
+                onChange={(e) => setCurrency(e.target.value)}
+                className="w-full p-3 rounded-lg glass border border-border/20 focus:border-border/40 bg-background text-foreground"
+                disabled={!isConnected}
+              >
+                <option value="USD">USD</option>
+                <option value="MUSD">MUSD</option>
+                <option value="BTC">BTC</option>
+                <option value="ETH">ETH</option>
+              </select>
+            </div>
+
+            <div className="flex items-center justify-between p-4 rounded-xl bg-muted/50 border border-border/20">
+              <div className="flex-1">
+                <Label htmlFor="notifications" className="text-sm font-medium">
+                  Browser Notifications
+                </Label>
+                <p className="text-xs text-foreground/60 mt-1">
+                  Get notified about payments and invoice updates
+                </p>
+              </div>
+              <Switch
+                id="notifications"
+                checked={notificationsEnabled}
+                onCheckedChange={setNotificationsEnabled}
+                disabled={!isConnected}
+              />
+            </div>
+          </div>
+        </SettingsSection>
+
+        {/* Data Management */}
+        <SettingsSection
+          title="Data Management"
+          description="Export or manage your data"
+          icon={Download}
+          iconBgColor="bg-orange-500/10"
+          iconColor="text-orange-400"
+          defaultOpen={false}
+        >
+          <div className="space-y-3">
+            <button
+              onClick={handleExport}
+              disabled={!isConnected}
+              className="w-full flex items-center gap-3 p-4 rounded-xl bg-muted/50 border border-border/20 hover:border-orange-400/40 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Download className="w-5 h-5 text-orange-400" />
+              <div className="text-left flex-1">
+                <p className="text-sm font-medium">Export All Data</p>
+                <p className="text-xs text-foreground/60">
+                  Download your settings and invoices as JSON
+                </p>
+              </div>
+            </button>
+
+            <button
+              onClick={handleClearData}
+              disabled={!isConnected}
+              className="w-full flex items-center gap-3 p-4 rounded-xl bg-muted/50 border border-red-500/20 hover:border-red-500/40 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Trash2 className="w-5 h-5 text-red-400" />
+              <div className="text-left flex-1">
+                <p className="text-sm font-medium text-red-400">Clear All Settings</p>
+                <p className="text-xs text-foreground/60">
+                  Reset all settings to default (cannot be undone)
+                </p>
+              </div>
+            </button>
+          </div>
+        </SettingsSection>
+
+        {/* Security Notice */}
+        <div className="p-4 rounded-xl border border-amber-500/20 bg-amber-500/5">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
+            <p className="text-xs text-foreground/70 leading-relaxed">
+              Keep your private keys safe and never share your seed phrase. Your wallet security is your responsibility.
+            </p>
+          </div>
         </div>
       </div>
     </div>

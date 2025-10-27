@@ -1,4 +1,5 @@
-import { Home, FileText, CreditCard, Vault, Settings } from 'lucide-react';
+import { useState } from 'react';
+import { Home, FileText, CreditCard, Vault, Settings, Menu, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface SidebarProps {
@@ -16,9 +17,27 @@ const navItems = [
 ];
 
 export function Sidebar({ activeTab, onTabChange, onShowNetworkModal }: SidebarProps) {
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   return (
-    <aside className="w-60 sm:w-72 lg:w-80 glass h-screen flex flex-col border-r border-border shrink-0">
+    <>
+      {/* Mobile menu button */}
+      <button
+        onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+        className="fixed top-4 left-4 z-50 lg:hidden glass p-2 rounded-lg"
+        aria-label="Toggle menu"
+      >
+        {isMobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+      </button>
+
+      {/* Sidebar */}
+      <aside className={cn(
+        "fixed lg:relative inset-y-0 left-0",
+        "w-60 sm:w-72 lg:w-80",
+        "glass h-screen flex flex-col border-r border-border shrink-0",
+        "transform transition-transform duration-300 z-40",
+        isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+      )}>
       {/* Logo */}
       <div className="p-5 sm:p-6 lg:p-8 border-b border-border">
         <div className="flex items-center gap-3">
@@ -65,6 +84,15 @@ export function Sidebar({ activeTab, onTabChange, onShowNetworkModal }: SidebarP
         ))}
       </nav>
 
-    </aside>
+      </aside>
+      
+      {/* Mobile overlay */}
+      {isMobileMenuOpen && (
+        <div 
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-30 lg:hidden"
+          onClick={() => setIsMobileMenuOpen(false)}
+        />
+      )}
+    </>
   );
 }

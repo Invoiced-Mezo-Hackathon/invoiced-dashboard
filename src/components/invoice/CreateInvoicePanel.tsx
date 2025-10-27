@@ -1,38 +1,32 @@
 import { useState, useEffect, useRef } from 'react';
+import { useAccount } from 'wagmi';
 import { Send, Plus, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { InvoiceQRModal } from './InvoiceQRModal';
-
-interface Invoice {
-  id: string;
-  clientName: string;
-  clientCode: string;
-  details: string;
-  amount: number; // Bitcoin amount
-  currency: string; // Will be 'BTC'
-  musdAmount: number; // USD equivalent
-  status: 'pending' | 'paid' | 'cancelled';
-  createdAt: string;
-  wallet: string;
-  bitcoinAddress?: string; // Mezo testnet address
-}
+import { useInvoiceContract } from '@/hooks/useInvoiceContract';
+import { parseEther } from 'viem';
 
 interface CreateInvoicePanelProps {
-  onInvoiceCreated: (invoice: Invoice) => void;
+  onInvoiceCreated?: () => void;
+  // Make the prop optional with a default of undefined
 }
 
-export function CreateInvoicePanel({ onInvoiceCreated }: CreateInvoicePanelProps) {
+export function CreateInvoicePanel({ onInvoiceCreated }: CreateInvoicePanelProps = {}) {
+  const { address, isConnected } = useAccount();
+  const { createInvoice: createBlockchainInvoice, isCreating } = useInvoiceContract();
+  
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [clientName, setClientName] = useState('');
   const [details, setDetails] = useState('');
   const [clientCode, setClientCode] = useState('');
-  const [bitcoinAmount, setBitcoinAmount] = useState('');
+  const [usdAmount, setUsdAmount] = useState('');
+  const [btcInput, setBtcInput] = useState('');
   const [bitcoinAddress, setBitcoinAddress] = useState('');
-  const [isSending, setIsSending] = useState(false);
   const [showQRModal, setShowQRModal] = useState(false);
-  const [createdInvoice, setCreatedInvoice] = useState<Invoice | null>(null);
+  const [createdInvoice, setCreatedInvoice] = useState<any>(null);
   const [bitcoinPrice, setBitcoinPrice] = useState<number>(0);
   const [isLoadingPrice, setIsLoadingPrice] = useState(true);
+  const [inputCurrency, setInputCurrency] = useState<'USD' | 'BTC'>('USD');
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Fetch real-time Bitcoin price
@@ -88,8 +82,34 @@ export function CreateInvoicePanel({ onInvoiceCreated }: CreateInvoicePanelProps
     }
   }, [clientName]);
 
-  // Calculate USD equivalent using real-time Bitcoin price
-  const usdAmount = bitcoinAmount ? parseFloat(bitcoinAmount) * bitcoinPrice : 0;
+  // Calculate Bitcoin equivalent from USD input using real-time Bitcoin price
+  const getBitcoinAmount = () => {
+    if (!usdAmount || !bitcoinPrice) return 0;
+    const parsed = parseFloat(usdAmount);
+    if (isNaN(parsed)) return 0;
+    return parsed / bitcoinPrice;
+  };
+  
+  const bitcoinAmount = getBitcoinAmount();
+  
+  // Calculate display amounts based on input currency
+  const getDisplayBitcoinAmount = () => {
+    if (inputCurrency === 'USD') return bitcoinAmount;
+    const parsed = parseFloat(btcInput || '0');
+    return isNaN(parsed) ? 0 : parsed;
+  };
+  
+  const getDisplayUsdAmount = () => {
+    if (inputCurrency === 'BTC') {
+      const parsed = parseFloat(btcInput || '0');
+      return isNaN(parsed) ? 0 : parsed * bitcoinPrice;
+    }
+    const parsed = parseFloat(usdAmount || '0');
+    return isNaN(parsed) ? 0 : parsed;
+  };
+  
+  const displayBitcoinAmount = getDisplayBitcoinAmount();
+  const displayUsdAmount = getDisplayUsdAmount();
 
   // Validate Mezo testnet address (Ethereum-compatible addresses)
   const isValidMezoAddress = (address: string): boolean => {
@@ -99,8 +119,18 @@ export function CreateInvoicePanel({ onInvoiceCreated }: CreateInvoicePanelProps
   };
 
   const handleSendInvoice = async () => {
-    if (!clientName.trim() || !details.trim() || !bitcoinAmount.trim()) {
+    if (!isConnected) {
+      toast.error('Please connect your wallet');
+      return;
+    }
+
+    if (!clientName.trim() || !details.trim()) {
       toast.error('Please fill in all required fields');
+      return;
+    }
+
+    if ((inputCurrency === 'USD' && !usdAmount.trim()) || (inputCurrency === 'BTC' && !btcInput.trim())) {
+      toast.error('Please enter an amount');
       return;
     }
 
@@ -114,52 +144,48 @@ export function CreateInvoicePanel({ onInvoiceCreated }: CreateInvoicePanelProps
       return;
     }
 
-    const amountNum = parseFloat(bitcoinAmount);
-    if (isNaN(amountNum) || amountNum <= 0) {
-      toast.error('Please enter a valid Bitcoin amount');
+    // Calculate the Bitcoin amount from the selected currency
+    const finalBitcoinAmount = inputCurrency === 'USD' 
+      ? parseFloat(usdAmount) / bitcoinPrice 
+      : parseFloat(btcInput);
+    
+    if (isNaN(finalBitcoinAmount) || finalBitcoinAmount <= 0) {
+      toast.error('Please enter a valid amount');
       return;
     }
-
-    setIsSending(true);
-
+    
     try {
-      // Simulate API call delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
-
-      const newInvoice: Invoice = {
-        id: Date.now().toString(),
-        clientName: clientName,
-        clientCode: clientCode,
-        details: details,
-        amount: amountNum,
-        currency: 'BTC',
-        musdAmount: usdAmount, // USD equivalent
-        status: 'pending',
-        createdAt: new Date().toISOString(),
-        wallet: '0x1234567890123456789012345678901234567890', // Placeholder
-        bitcoinAddress: bitcoinAddress
-      };
+      // Convert BTC to wei for smart contract
+      const amountInWei = parseEther(finalBitcoinAmount.toString());
+      
+      // Generate client code
+      const clientCode = `CLT-${clientName.substring(0, 3).toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`;
+      
+      // Call smart contract
+      await createBlockchainInvoice({
+        clientName,
+        details,
+        amount: finalBitcoinAmount.toString(),
+        currency: 'USD',
+        bitcoinAddress,
+      });
 
       // Reset form
       setClientName('');
       setDetails('');
-      setBitcoinAmount('');
+      setUsdAmount('');
+      setBtcInput('');
       setClientCode('');
       setBitcoinAddress('');
+      setInputCurrency('USD');
       setIsDropdownOpen(false);
       
-      // Show success message
-      toast.success('Invoice created successfully! Client has been notified.', {
-        duration: 4000,
-      });
-      
-      onInvoiceCreated(newInvoice);
+      // Notify parent
+      onInvoiceCreated?.();
       
     } catch (error) {
       console.error('Error creating invoice:', error);
       toast.error('Failed to create invoice. Please try again.');
-    } finally {
-      setIsSending(false);
     }
   };
 
@@ -237,24 +263,72 @@ export function CreateInvoicePanel({ onInvoiceCreated }: CreateInvoicePanelProps
                 />
               </div>
 
-              {/* Bitcoin Amount */}
+              {/* Amount Input with Currency Toggle */}
               <div>
-                <label className="block text-sm font-medium text-white/80 mb-2">
-                  Bitcoin Amount *
-                </label>
-                <input
-                  type="number"
-                  value={bitcoinAmount}
-                  onChange={(e) => setBitcoinAmount(e.target.value)}
-                  className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent"
-                  placeholder="0.001"
-                  step="0.00000001"
-                  min="0"
-                />
-                {bitcoinAmount && (
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-medium text-white/80">
+                    Amount *
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setInputCurrency('USD')}
+                      className={`px-3 py-1 text-xs rounded-lg transition-all ${
+                        inputCurrency === 'USD'
+                          ? 'bg-orange-500 text-white'
+                          : 'bg-white/10 text-white/60 hover:bg-white/20'
+                      }`}
+                    >
+                      USD
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setInputCurrency('BTC')}
+                      className={`px-3 py-1 text-xs rounded-lg transition-all ${
+                        inputCurrency === 'BTC'
+                          ? 'bg-orange-500 text-white'
+                          : 'bg-white/10 text-white/60 hover:bg-white/20'
+                      }`}
+                    >
+                      BTC
+                    </button>
+                  </div>
+                </div>
+                
+                {inputCurrency === 'USD' ? (
+                  <input
+                    type="number"
+                    value={usdAmount}
+                    onChange={(e) => setUsdAmount(e.target.value)}
+                    className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent"
+                    placeholder="100.00"
+                    step="0.01"
+                    min="0"
+                  />
+                ) : (
+                  <input
+                    type="number"
+                    value={btcInput}
+                    onChange={(e) => setBtcInput(e.target.value)}
+                    className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent"
+                    placeholder="0.001"
+                    step="0.00000001"
+                    min="0"
+                  />
+                )}
+                
+                {((inputCurrency === 'USD' && usdAmount) || (inputCurrency === 'BTC' && btcInput)) && (
                   <div className="mt-2 p-3 bg-white/5 rounded-xl">
                     <p className="text-sm text-white/80">
-                      USD Equivalent: <span className="font-semibold text-orange-400">${usdAmount.toFixed(2)}</span>
+                      {inputCurrency === 'USD' ? (
+                        <>
+                          Bitcoin Amount: <span className="font-semibold text-orange-400">{isNaN(bitcoinAmount) ? '0.00000000' : bitcoinAmount.toFixed(8)} BTC</span>
+                        </>
+                      ) : (
+                        <>
+                          USD Equivalent: <span className="font-semibold text-orange-400">${isNaN(displayUsdAmount) ? '0.00' : displayUsdAmount.toFixed(2)}</span>
+                        </>
+                      )}
                     </p>
                     <p className="text-xs text-white/60 mt-1">
                       {isLoadingPrice ? (
@@ -263,7 +337,7 @@ export function CreateInvoicePanel({ onInvoiceCreated }: CreateInvoicePanelProps
                           Loading Bitcoin price...
                         </span>
                       ) : (
-                        `Based on Bitcoin price: $${bitcoinPrice.toLocaleString()}`
+                        `Current Bitcoin price: $${bitcoinPrice.toLocaleString()}`
                       )}
                     </p>
                   </div>
@@ -291,10 +365,10 @@ export function CreateInvoicePanel({ onInvoiceCreated }: CreateInvoicePanelProps
               {/* Send Button */}
               <button
                 onClick={handleSendInvoice}
-                disabled={isSending}
+                disabled={isCreating}
                 className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 disabled:from-gray-500 disabled:to-gray-600 text-white font-medium rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl disabled:cursor-not-allowed"
               >
-                {isSending ? (
+                {isCreating ? (
                   <>
                     <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
                     <span>Creating Invoice...</span>
