@@ -1,9 +1,6 @@
 import { useState, useEffect } from 'react';
-import { ArrowUpRight, ArrowDownLeft, BarChart3, List, ExternalLink } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { ArrowDownLeft, BarChart3, List, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import { transactionStorage } from '@/services/transaction-storage';
 import { MEZO_EXPLORER_URL } from '@/lib/boar-config';
@@ -27,8 +24,6 @@ interface PaymentsProps {
 }
 
 export function Payments({ invoices }: PaymentsProps) {
-  const [showWithdrawModal, setShowWithdrawModal] = useState(false);
-  const [withdrawAmount, setWithdrawAmount] = useState('');
   const [viewMode, setViewMode] = useState<'list' | 'graph'>('list');
   const [bitcoinPrice, setBitcoinPrice] = useState<number>(0);
 
@@ -94,21 +89,15 @@ export function Payments({ invoices }: PaymentsProps) {
     return acc;
   }, [] as any[]).sort((a, b) => new Date(a.day).getTime() - new Date(b.day).getTime());
 
-  const handleWithdraw = () => {
-    // Placeholder for withdraw functionality
-    console.log('Withdraw amount:', withdrawAmount);
-    setShowWithdrawModal(false);
-    setWithdrawAmount('');
-  };
 
   return (
-    <div className="flex-1 h-screen overflow-y-auto p-8">
+    <div className="flex-1 h-screen overflow-y-auto p-4 sm:p-6 lg:p-8">
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold mb-2 font-title bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent">
+      <div className="mb-6 lg:mb-8">
+        <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-2 font-title bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent">
           Payments
         </h1>
-        <p className="text-foreground/60 text-lg">Track your payment history and manage withdrawals</p>
+        <p className="text-sm sm:text-base lg:text-lg text-foreground/60">Track your payment history and transactions</p>
       </div>
 
       {/* Payment Summary */}
@@ -290,63 +279,6 @@ export function Payments({ invoices }: PaymentsProps) {
           )
         )}
       </div>
-
-      {/* Withdraw Funds Button */}
-      <div className="flex justify-center">
-        <Button
-          onClick={() => setShowWithdrawModal(true)}
-          className="px-8 py-3 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-medium rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl"
-        >
-          Withdraw Funds
-        </Button>
-      </div>
-
-      {/* Withdraw Modal */}
-      {showWithdrawModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="glass-card p-6 rounded-2xl w-full max-w-md">
-            <h3 className="text-xl font-semibold mb-6 font-title">Withdraw Funds</h3>
-            
-            <div className="space-y-4">
-              <div>
-                <Label htmlFor="amount" className="text-sm font-medium text-white/80">
-                  Amount (MUSD)
-                </Label>
-                <Input
-                  id="amount"
-                  type="number"
-                  value={withdrawAmount}
-                  onChange={(e) => setWithdrawAmount(e.target.value)}
-                  placeholder="0.00"
-                  className="mt-2"
-                />
-              </div>
-              
-              <div className="p-3 bg-white/5 rounded-xl">
-                <p className="text-sm text-white/80">
-                  Available Balance: <span className="font-semibold text-orange-400">${(totalReceived - totalSent).toFixed(2)} MUSD</span>
-                </p>
-              </div>
-            </div>
-
-            <div className="flex gap-3 mt-6">
-              <Button
-                variant="outline"
-                onClick={() => setShowWithdrawModal(false)}
-                className="flex-1"
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={handleWithdraw}
-                className="flex-1 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700"
-              >
-                Withdraw
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

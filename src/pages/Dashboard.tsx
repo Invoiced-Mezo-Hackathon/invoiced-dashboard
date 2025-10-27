@@ -14,20 +14,29 @@ interface Invoice {
   bitcoinAddress?: string;
 }
 
+interface InvoiceStats {
+  totalRevenue: number;
+  activeInvoices: number;
+  pendingAmount: number;
+  totalInvoices: number;
+  paidInvoices: number;
+}
+
 interface DashboardProps {
   onNavigate: (tab: string) => void;
   invoices: Invoice[];
+  stats: InvoiceStats;
 }
 
-export function Dashboard({ onNavigate, invoices }: DashboardProps) {
-  // Calculate stats from invoices
-  const totalRevenue = invoices
+export function Dashboard({ onNavigate, invoices, stats }: DashboardProps) {
+  // Use stats from hook if available, otherwise calculate from invoices
+  const totalRevenue = stats?.totalRevenue ?? invoices
     .filter(invoice => invoice.status === 'paid')
     .reduce((sum, invoice) => sum + invoice.amount, 0);
   
-  const activeInvoices = invoices.filter(invoice => invoice.status === 'pending').length;
-  const totalInvoices = invoices.length;
-  const pendingAmount = invoices
+  const activeInvoices = stats?.activeInvoices ?? invoices.filter(invoice => invoice.status === 'pending').length;
+  const totalInvoices = stats?.totalInvoices ?? invoices.length;
+  const pendingAmount = stats?.pendingAmount ?? invoices
     .filter(invoice => invoice.status === 'pending')
     .reduce((sum, invoice) => sum + invoice.amount, 0);
 
@@ -122,10 +131,10 @@ export function Dashboard({ onNavigate, invoices }: DashboardProps) {
       <div className="relative z-10">
         {/* Header */}
         <div className="mb-8 lg:mb-12">
-          <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold mb-2 font-title bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent">
+          <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-2 font-title bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent">
             Dashboard
           </h1>
-          <p className="text-foreground/60 text-lg">Welcome back! Here's what's happening with your business.</p>
+          <p className="text-sm sm:text-base lg:text-lg text-foreground/60">Welcome back! Here's what's happening with your business.</p>
         </div>
 
         {/* Stats Overview */}

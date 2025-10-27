@@ -1,68 +1,86 @@
-const hre = require("hardhat");
+const { ethers } = require("ethers");
+const fs = require("fs");
+require("dotenv").config();
 
 async function main() {
-  console.log("🚀 Deploying contracts to Mezo testnet...");
+  console.log("🚀 Deploying InvoiceContract to Mezo Testnet...");
   
-  // Get the deployer account
-  const [deployer] = await hre.ethers.getSigners();
-  console.log("Deploying contracts with account:", deployer.address);
+  // Get private key from environment
+  const privateKey = process.env.PRIVATE_KEY?.replace(/['" ]/g, '').trim();
   
-  // Check balance
-  const balance = await hre.ethers.provider.getBalance(deployer.address);
-  console.log("Account balance:", hre.ethers.formatEther(balance), "BTC");
+  if (!privateKey || privateKey === '0x') {
+    console.log("❌ No PRIVATE_KEY found in .env file");
+    process.exit(1);
+  }
+  
+  // Setup provider and signer
+  const provider = new ethers.JsonRpcProvider("https://rpc.test.mezo.org");
+  let wallet;
+  
+  try {
+    wallet = new ethers.Wallet(privateKey, provider);
+  } catch (error) {
+    console.log("❌ Invalid private key:", error.message);
+    console.log("Please check your .env file. Private key should be a 64-character hex string.");
+    process.exit(1);
+  }
+  
+  console.log("Deploying with account:", wallet.address);
+  
+  const balance = await provider.getBalance(wallet.address);
+  console.log("Balance:", ethers.formatEther(balance), "BTC");
   
   if (balance === 0n) {
-    console.log("❌ No balance found! Please get testnet BTC from the faucet:");
-    console.log("🔗 https://testnet.mezo.org/");
-    return;
+    console.log("❌ No testnet BTC! Get some from: https://testnet.mezo.org/");
+    process.exit(1);
   }
 
-  // Deploy InvoiceContract
+  // Read compiled contract
+  const contractPath = "artifacts/contracts/InvoiceContract.sol/InvoiceContract.json";
+  const contractJson = JSON.parse(fs.readFileSync(contractPath, "utf8"));
+  
   console.log("\n📄 Deploying InvoiceContract...");
-  const InvoiceContract = await hre.ethers.getContractFactory("InvoiceContract");
-  const invoiceContract = await InvoiceContract.deploy();
+  const factory = new ethers.ContractFactory(
+    contractJson.abi,
+    contractJson.bytecode,
+    wallet
+  );
   
+  const invoiceContract = await factory.deploy();
+  console.log("Waiting for deployment (this may take a minute)...");
   await invoiceContract.waitForDeployment();
-  const invoiceAddress = await invoiceContract.getAddress();
-  console.log("✅ InvoiceContract deployed to:", invoiceAddress);
-
-  // Deploy MezoVaultContract (our custom vault contract)
-  console.log("\n🏦 Deploying MezoVaultContract...");
-  const MezoVaultContract = await hre.ethers.getContractFactory("MezoVaultContract");
-  const vaultContract = await MezoVaultContract.deploy();
   
-  await vaultContract.waitForDeployment();
-  const vaultAddress = await vaultContract.getAddress();
-  console.log("✅ MezoVaultContract deployed to:", vaultAddress);
-
-  // Verify contracts on explorer
-  console.log("\n🔍 Contract verification:");
-  console.log("InvoiceContract:", `https://explorer.test.mezo.org/address/${invoiceAddress}`);
-  console.log("MezoVaultContract:", `https://explorer.test.mezo.org/address/${vaultAddress}`);
-
-  // Save contract addresses to a file
-  const contractAddresses = {
-    InvoiceContract: invoiceAddress,
-    MezoVaultContract: vaultAddress,
-    network: "mezotestnet",
-    chainId: 31611,
-    deployedAt: new Date().toISOString(),
-    deployer: deployer.address,
-  };
-
-  console.log("\n📋 Contract addresses:");
-  console.log(JSON.stringify(contractAddresses, null, 2));
-
-  console.log("\n🎉 Deployment completed successfully!");
-  console.log("\nNext steps:");
-  console.log("1. Update your frontend with these contract addresses");
-  console.log("2. Test the vault functionality");
-  console.log("3. Connect to Mezo testnet in your wallet");
+  const address = await invoiceContract.getAddress();
+  console.log("\n✅ InvoiceContract deployed to:", address);
+  console.log("🌐 Explorer:", `https://explorer.test.mezo.org/address/${address}`);
+  
+  // Update the config file
+  console.log("\n📋 Updating src/lib/mezo.ts...");
+  const configPath = "src/lib/mezo.ts";
+  let config = fs.readFileSync(configPath, "utf8");
+  
+  // Replace the placeholder address
+  config = config.replace(
+    /INVOICE_CONTRACT:\s*'[^']*'/,
+    `INVOICE_CONTRACT: '${address}'`
+  );
+  
+  fs.writeFileSync(configPath, config);
+  console.log("✅ Config updated!");
+  
+  console.log("\n🎉 Deployment successful!");
+  console.log("\nYour app at http://localhost:3000 will now use the deployed contract!");
+  
+  return address;
 }
 
 main()
-  .then(() => process.exit(0))
+  .then(() => {
+    console.log("\n✅ All done!");
+    process.exit(0);
+  })
   .catch((error) => {
-    console.error("❌ Deployment failed:", error);
+    console.error("\n💥 Deployment failed:", error.message);
+    console.error(error);
     process.exit(1);
   });

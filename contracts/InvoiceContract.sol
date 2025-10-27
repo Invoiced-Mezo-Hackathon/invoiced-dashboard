@@ -181,4 +181,45 @@ contract InvoiceContract {
         
         return total;
     }
+    
+    // Get all invoices globally (for shared visibility)
+    function getAllInvoices() public view returns (Invoice[] memory) {
+        Invoice[] memory allInvoices = new Invoice[](invoiceCount);
+        
+        for (uint256 i = 1; i <= invoiceCount; i++) {
+            allInvoices[i - 1] = invoices[i];
+        }
+        
+        return allInvoices;
+    }
+    
+    // Get all invoice IDs by status
+    function getInvoicesByStatus(bool includePaid, bool includeCancelled) public view returns (uint256[] memory) {
+        uint256[] memory tempArray = new uint256[](invoiceCount);
+        uint256 count = 0;
+        
+        for (uint256 i = 1; i <= invoiceCount; i++) {
+            bool isPaid = invoices[i].paid;
+            bool isCancelled = invoices[i].cancelled;
+            
+            if (isPaid && includePaid) {
+                tempArray[count] = i;
+                count++;
+            } else if (isCancelled && includeCancelled) {
+                tempArray[count] = i;
+                count++;
+            } else if (!isPaid && !isCancelled) {
+                tempArray[count] = i;
+                count++;
+            }
+        }
+        
+        // Create properly sized array
+        uint256[] memory result = new uint256[](count);
+        for (uint256 i = 0; i < count; i++) {
+            result[i] = tempArray[i];
+        }
+        
+        return result;
+    }
 }

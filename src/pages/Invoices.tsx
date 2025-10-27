@@ -6,6 +6,7 @@ import { InvoiceQRModal } from '@/components/invoice/InvoiceQRModal';
 import { CreateInvoicePanel } from '@/components/invoice/CreateInvoicePanel';
 import { useInvoicePaymentMonitor } from '@/hooks/usePaymentMonitor';
 import { TransactionDetailsModal } from '@/components/TransactionDetailsModal';
+import { useInvoiceContract } from '@/hooks/useInvoiceContract';
 
 interface Invoice {
   id: string;
@@ -23,11 +24,11 @@ interface Invoice {
 
 interface InvoicesProps {
   invoices: Invoice[];
-  onUpdateInvoice: (id: string, updates: Partial<Invoice>) => void;
-  onInvoiceCreated: (invoice: Invoice) => void;
 }
 
-export function Invoices({ invoices, onUpdateInvoice, onInvoiceCreated }: InvoicesProps) {
+export function Invoices({ invoices }: InvoicesProps) {
+  const { confirmPayment, cancelInvoice, refreshData, createInvoice } = useInvoiceContract();
+  
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [showQRModal, setShowQRModal] = useState(false);
   const [qrInvoice, setQrInvoice] = useState<Invoice | null>(null);
@@ -42,17 +43,19 @@ export function Invoices({ invoices, onUpdateInvoice, onInvoiceCreated }: Invoic
     return invoice.status === statusFilter;
   });
 
-  const handleMarkAsPaid = () => {
+  const handleMarkAsPaid = async () => {
     if (selectedInvoice) {
-      onUpdateInvoice(selectedInvoice.id, { status: 'paid' });
+      await confirmPayment(selectedInvoice.id);
       setSelectedInvoice(null);
+      refreshData();
     }
   };
 
-  const handleCancel = () => {
+  const handleCancel = async () => {
     if (selectedInvoice) {
-      onUpdateInvoice(selectedInvoice.id, { status: 'cancelled' });
+      await cancelInvoice(selectedInvoice.id);
       setSelectedInvoice(null);
+      refreshData();
     }
   };
 
@@ -74,11 +77,11 @@ export function Invoices({ invoices, onUpdateInvoice, onInvoiceCreated }: Invoic
   };
 
   return (
-    <div className="flex-1 h-screen overflow-y-auto p-8">
-      <div className="mb-8">
+    <div className="flex-1 h-screen overflow-y-auto p-4 sm:p-6 lg:p-8">
+      <div className="mb-6 lg:mb-8">
         <div>
-          <h1 className="text-4xl font-bold mb-2 font-title">Invoices</h1>
-          <p className="text-white/50">
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold mb-2 font-title">Invoices</h1>
+          <p className="text-sm sm:text-base text-white/50">
             {filteredInvoices.length} invoice{filteredInvoices.length !== 1 ? 's' : ''} 
             {statusFilter !== 'all' && ` (${statusFilter})`}
           </p>
@@ -107,7 +110,7 @@ export function Invoices({ invoices, onUpdateInvoice, onInvoiceCreated }: Invoic
 
       {/* Create Invoice Button - Middle Section */}
       <div className="mb-8 flex justify-center">
-        <CreateInvoicePanel onInvoiceCreated={onInvoiceCreated} />
+        <CreateInvoicePanel />
       </div>
 
       {/* Invoices Grid */}
@@ -352,8 +355,8 @@ export function Invoices({ invoices, onUpdateInvoice, onInvoiceCreated }: Invoic
                 Keep Invoice
               </Button>
               <Button
-                onClick={() => {
-                  onUpdateInvoice(showCancelConfirm.id, { status: 'cancelled' });
+                onClick={async () => {
+                  await cancelInvoice(showCancelConfirm.id);
                   setShowCancelConfirm(null);
                 }}
                 className="flex-1 bg-red-500 hover:bg-red-600 flex items-center gap-2"

@@ -1,0 +1,9 @@
+import{b as o}from"./core-373882a2.js";import"./index-4a61b4de.js";import"./index.es-3ce3f490.js";const a=o`<svg fill="none" viewBox="0 0 16 16">
+  <path
+    fill="currentColor"
+    fill-rule="evenodd"
+    d="M0 3a1 1 0 0 1 1-1h14a1 1 0 1 1 0 2H1a1 1 0 0 1-1-1Zm2.63 5.25a1 1 0 0 1 1-1h8.75a1 1 0 1 1 0 2H3.63a1 1 0 0 1-1-1Zm2.62 5.25a1 1 0 0 1 1-1h3.5a1 1 0 0 1 0 2h-3.5a1 1 0 0 1-1-1Z"
+    clip-rule="evenodd"
+  />
+</svg>`;export{a as filtersSvg};
+//# sourceMappingURL=filters-2e261b0a.js.map

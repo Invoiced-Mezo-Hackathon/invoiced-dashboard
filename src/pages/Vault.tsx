@@ -20,6 +20,7 @@ export function Vault() {
     isLoading, 
     error,
     musdBalance,
+    walletBtcBalance, // Wallet BTC balance
     collateralBalance,
     borrowedAmount,
     collateralRatio,
@@ -136,10 +137,55 @@ export function Vault() {
   };
 
   return (
-    <div className="flex-1 h-screen overflow-y-auto p-8">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-2 font-title">Vault</h1>
-        <p className="text-white/60">Manage your collateral and borrowing</p>
+    <div className="flex-1 h-screen overflow-y-auto p-4 sm:p-6 lg:p-8">
+      <div className="mb-6 lg:mb-8">
+        <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold mb-2 font-title">Vault</h1>
+        <p className="text-sm sm:text-base text-white/60">Manage your collateral and borrowing</p>
+      </div>
+
+      {/* Educational Section */}
+      <div className="max-w-2xl mx-auto mb-8 glass p-6 rounded-2xl border border-white/10">
+        <h2 className="text-xl font-bold mb-3 text-green-400">💰 How the Vault Works</h2>
+        <div className="space-y-3 text-sm text-white/80">
+          <div className="flex items-start gap-3">
+            <span className="text-2xl">1️⃣</span>
+            <div>
+              <p className="font-semibold">Deposit BTC</p>
+              <p className="text-white/60">Lock your Bitcoin in the vault as collateral (you keep ownership)</p>
+            </div>
+          </div>
+          <div className="flex items-start gap-3">
+            <span className="text-2xl">2️⃣</span>
+            <div>
+              <p className="font-semibold">Borrow MUSD</p>
+              <p className="text-white/60">Get stablecoins to spend, trade, or use in DeFi - at 2.5% fixed APR</p>
+            </div>
+          </div>
+          <div className="flex items-start gap-3">
+            <span className="text-2xl">3️⃣</span>
+            <div>
+              <p className="font-semibold">Spend Your MUSD</p>
+              <p className="text-white/60">Use MUSD anywhere - send to anyone, use in other DeFi apps, or convert to cash</p>
+            </div>
+          </div>
+          <div className="flex items-start gap-3">
+            <span className="text-2xl">4️⃣</span>
+            <div>
+              <p className="font-semibold">Repay & Withdraw</p>
+              <p className="text-white/60">Pay back when you want (no deadlines), get your BTC back</p>
+            </div>
+          </div>
+        </div>
+        <div className="mt-4 p-4 bg-green-500/10 border border-green-500/20 rounded-lg">
+          <p className="text-green-400 font-semibold mb-1">✨ Benefits:</p>
+          <ul className="text-sm text-white/70 space-y-1">
+            <li>✅ Keep your BTC (HODL) while accessing liquidity</li>
+            <li>✅ Low 2.5% fixed interest (vs 8-20% variable rates elsewhere)</li>
+            <li>✅ No repayment deadlines - pay back whenever</li>
+            <li>✅ 90% of collateral value available to borrow</li>
+            <li>✅ Use MUSD anywhere or cash out anytime</li>
+          </ul>
+        </div>
       </div>
 
       <div className="max-w-2xl mx-auto space-y-8">
@@ -183,15 +229,16 @@ export function Vault() {
           <div className="grid grid-cols-3 gap-6 w-full">
             <div className="text-center">
               <div className="flex items-center justify-center gap-1 mb-1">
-                <p className="text-sm text-white/60">BTC Balance</p>
+                <p className="text-sm text-white/60">Vault BTC</p>
                 <div className="group relative">
                   <Info className="w-3 h-3 text-white/40 hover:text-white/60 cursor-help" />
                   <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-48 bg-black/90 backdrop-blur-sm border border-white/20 rounded-lg p-3 text-xs opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-10">
-                    <p className="text-white/90">Your Bitcoin that you put in. This keeps your loan safe.</p>
+                    <p className="text-white/90">Bitcoin deposited in the vault as collateral.</p>
                   </div>
                 </div>
               </div>
-              <p className="text-xl font-bold">{vaultData?.collateralAmount || '0'} BTC</p>
+              <p className="text-xl font-bold">{collateralBalance} BTC</p>
+              <p className="text-xs text-white/50">Wallet: {walletBtcBalance} BTC</p>
             </div>
             <div className="text-center border-x border-white/10">
               <div className="flex items-center justify-center gap-1 mb-1">
@@ -223,7 +270,7 @@ export function Vault() {
         </div>
 
         {/* Action Buttons */}
-        <div className="grid grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
           {(['deposit', 'borrow', 'repay', 'withdraw', 'send'] as const).map((action) => {
             const getActionDescription = (action: string) => {
               switch (action) {
@@ -264,6 +311,9 @@ export function Vault() {
             <div>
               <p className="text-sm text-white/60 mb-1">MUSD Balance</p>
               <p className="text-3xl font-bold">{musdBalance} MUSD</p>
+              {parseFloat(musdBalance) > 0 && (
+                <p className="text-xs text-green-400 mt-1">✓ Available to spend or withdraw</p>
+              )}
             </div>
             <div className="text-right">
               <p className="text-sm text-white/60 mb-1">Interest Rate</p>
@@ -271,6 +321,34 @@ export function Vault() {
             </div>
           </div>
         </div>
+
+        {/* MUSD Usage Guide */}
+        {parseFloat(musdBalance) > 0 && (
+          <div className="glass p-6 rounded-2xl border border-blue-500/20 bg-blue-500/10">
+            <h3 className="text-lg font-bold mb-3 text-blue-400">💡 How to Use Your MUSD</h3>
+            <div className="space-y-2 text-sm text-white/80">
+              <div className="flex items-start gap-2">
+                <span className="text-green-400">✓</span>
+                <p><strong>Send to Others:</strong> Use the "Send" button below to transfer MUSD to any Mezo address</p>
+              </div>
+              <div className="flex items-start gap-2">
+                <span className="text-green-400">✓</span>
+                <p><strong>Use in DeFi:</strong> MUSD works with other Mezo apps, pools, and protocols</p>
+              </div>
+              <div className="flex items-start gap-2">
+                <span className="text-green-400">✓</span>
+                <p><strong>Repay Your Loan:</strong> Click "Repay" to return MUSD and free your BTC collateral</p>
+              </div>
+              <div className="flex items-start gap-2">
+                <span className="text-green-400">✓</span>
+                <p><strong>Keep as Savings:</strong> MUSD is stable (pegged to $1) - safe place to store value</p>
+              </div>
+              <p className="text-xs text-blue-300 mt-3 pt-3 border-t border-blue-400/20">
+                💰 <strong>Tip:</strong> MUSD is Bitcoin-backed stablecoin, as stable as USD but powered by BTC!
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Error Display */}
         {error && (
@@ -282,22 +360,77 @@ export function Vault() {
           </div>
         )}
 
+        {/* Pending Transaction Notifications - Stage-Specific */}
+        {depositHash && isPending && (
+          <div className="glass p-4 rounded-2xl border border-orange-500/20 bg-orange-500/10">
+            <div className="flex items-center gap-2">
+              <Loader2 className="w-5 h-5 text-orange-400 animate-spin" />
+              <div>
+                <p className="text-orange-400 font-semibold">📤 Depositing {actionAmount} BTC...</p>
+                <p className="text-orange-300 text-sm">Your BTC is being secured in the vault</p>
+                <a href={`https://explorer.test.mezo.org/tx/${depositHash}`} target="_blank" rel="noopener noreferrer" className="text-orange-300 text-xs underline hover:text-orange-200 inline-block mt-1">📄 View Transaction →</a>
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {borrowHash && isPending && (
+          <div className="glass p-4 rounded-2xl border border-orange-500/20 bg-orange-500/10">
+            <div className="flex items-center gap-2">
+              <Loader2 className="w-5 h-5 text-orange-400 animate-spin" />
+              <div>
+                <p className="text-orange-400 font-semibold">💰 Borrowing {actionAmount} MUSD...</p>
+                <p className="text-orange-300 text-sm">Minting MUSD tokens for your wallet</p>
+                <a href={`https://explorer.test.mezo.org/tx/${borrowHash}`} target="_blank" rel="noopener noreferrer" className="text-orange-300 text-xs underline hover:text-orange-200 inline-block mt-1">📄 View Transaction →</a>
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {repayHash && isPending && (
+          <div className="glass p-4 rounded-2xl border border-orange-500/20 bg-orange-500/10">
+            <div className="flex items-center gap-2">
+              <Loader2 className="w-5 h-5 text-orange-400 animate-spin" />
+              <div>
+                <p className="text-orange-400 font-semibold">💸 Repaying {actionAmount} MUSD...</p>
+                <p className="text-orange-300 text-sm">Burning MUSD tokens and clearing your debt</p>
+                <a href={`https://explorer.test.mezo.org/tx/${repayHash}`} target="_blank" rel="noopener noreferrer" className="text-orange-300 text-xs underline hover:text-orange-200 inline-block mt-1">📄 View Transaction →</a>
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {withdrawHash && isPending && (
+          <div className="glass p-4 rounded-2xl border border-orange-500/20 bg-orange-500/10">
+            <div className="flex items-center gap-2">
+              <Loader2 className="w-5 h-5 text-orange-400 animate-spin" />
+              <div>
+                <p className="text-orange-400 font-semibold">📥 Withdrawing {actionAmount} BTC...</p>
+                <p className="text-orange-300 text-sm">Returning your BTC from vault to wallet</p>
+                <a href={`https://explorer.test.mezo.org/tx/${withdrawHash}`} target="_blank" rel="noopener noreferrer" className="text-orange-300 text-xs underline hover:text-orange-200 inline-block mt-1">📄 View Transaction →</a>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Action-Specific Success Popups */}
         {isDepositSuccess && (
-          <div className="glass p-4 rounded-2xl border border-green-500/20 bg-green-500/10">
+          <div className="glass p-4 rounded-2xl border border-green-500/20 bg-green-500/10 animate-pulse">
             <div className="flex items-center gap-2">
               <CheckCircle className="w-5 h-5 text-green-400" />
               <div>
-                <p className="text-green-400 font-semibold">BTC deposited successfully!</p>
-                <p className="text-green-300 text-sm">Collateral: {actionAmount} BTC</p>
+                <p className="text-green-400 font-semibold">✓ BTC Deposited Successfully!</p>
+                <p className="text-green-300 text-sm mt-1">📦 Vault now holds: {collateralBalance} BTC</p>
+                <p className="text-green-300 text-sm">💼 Available to borrow: ~{Math.floor(parseFloat(collateralBalance) * 50000 * 0.9)} MUSD</p>
+                <p className="text-green-300 text-sm">🔒 Collateral ratio: {collateralRatio.toFixed(2)}% (Safe)</p>
                 {depositHash && (
                   <a 
                     href={`https://explorer.test.mezo.org/tx/${depositHash}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-green-300 text-xs underline hover:text-green-200"
+                    className="text-green-300 text-xs underline hover:text-green-200 inline-block mt-1"
                   >
-                    View on Explorer
+                    📄 View Transaction on Explorer →
                   </a>
                 )}
               </div>
@@ -306,20 +439,23 @@ export function Vault() {
         )}
 
         {isBorrowSuccess && (
-          <div className="glass p-4 rounded-2xl border border-green-500/20 bg-green-500/10">
+          <div className="glass p-4 rounded-2xl border border-blue-500/20 bg-blue-500/10 animate-pulse">
             <div className="flex items-center gap-2">
-              <CheckCircle className="w-5 h-5 text-green-400" />
+              <CheckCircle className="w-5 h-5 text-blue-400" />
               <div>
-                <p className="text-green-400 font-semibold">MUSD borrowed successfully!</p>
-                <p className="text-green-300 text-sm">{actionAmount} MUSD sent to your wallet</p>
+                <p className="text-blue-400 font-semibold">✓ MUSD Borrowed Successfully!</p>
+                <p className="text-blue-300 text-sm mt-1">💵 You received: {actionAmount} MUSD</p>
+                <p className="text-blue-300 text-sm">📊 MUSD in wallet: {musdBalance} MUSD</p>
+                <p className="text-blue-300 text-sm">🔒 Collateral ratio: {collateralRatio.toFixed(2)}%</p>
+                <p className="text-blue-300 text-sm">💰 Interest rate: {interestRate}% APR (Fixed)</p>
                 {borrowHash && (
                   <a 
                     href={`https://explorer.test.mezo.org/tx/${borrowHash}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-green-300 text-xs underline hover:text-green-200"
+                    className="text-blue-300 text-xs underline hover:text-blue-200 inline-block mt-1"
                   >
-                    View on Explorer
+                    📄 View Transaction on Explorer →
                   </a>
                 )}
               </div>
@@ -328,26 +464,28 @@ export function Vault() {
         )}
 
         {isRepaySuccess && (
-          <div className="glass p-4 rounded-2xl border border-green-500/20 bg-green-500/10">
+          <div className="glass p-4 rounded-2xl border border-purple-500/20 bg-purple-500/10 animate-pulse">
             <div className="flex items-center gap-2">
-              <CheckCircle className="w-5 h-5 text-green-400" />
+              <CheckCircle className="w-5 h-5 text-purple-400" />
               <div>
-                <p className="text-green-400 font-semibold">Loan repaid successfully!</p>
-                <p className="text-green-300 text-sm">Your collateral is now available.</p>
+                <p className="text-purple-400 font-semibold">✓ Loan Repaid Successfully!</p>
+                <p className="text-purple-300 text-sm mt-1">🔓 Debt cleared: ~{borrowedAmount} MUSD repaid</p>
+                <p className="text-purple-300 text-sm">💼 Your {collateralBalance} BTC collateral is now available</p>
+                <p className="text-purple-300 text-sm">✅ You can withdraw your BTC anytime</p>
                 <Button
                   onClick={() => setActiveAction('withdraw')}
-                  className="mt-2 bg-green-500 hover:bg-green-600 text-white text-xs px-3 py-1"
+                  className="mt-2 bg-purple-500 hover:bg-purple-600 text-white text-xs px-3 py-1"
                 >
-                  Withdraw Now
+                  🎁 Withdraw BTC Now
                 </Button>
                 {repayHash && (
                   <a 
                     href={`https://explorer.test.mezo.org/tx/${repayHash}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-green-300 text-xs underline hover:text-green-200 block mt-1"
+                    className="text-purple-300 text-xs underline hover:text-purple-200 inline-block mt-1"
                   >
-                    View on Explorer
+                    📄 View Transaction on Explorer →
                   </a>
                 )}
               </div>
@@ -356,20 +494,22 @@ export function Vault() {
         )}
 
         {isWithdrawSuccess && (
-          <div className="glass p-4 rounded-2xl border border-green-500/20 bg-green-500/10">
+          <div className="glass p-4 rounded-2xl border border-yellow-500/20 bg-yellow-500/10 animate-pulse">
             <div className="flex items-center gap-2">
-              <CheckCircle className="w-5 h-5 text-green-400" />
+              <CheckCircle className="w-5 h-5 text-yellow-400" />
               <div>
-                <p className="text-green-400 font-semibold">BTC withdrawn successfully!</p>
-                <p className="text-green-300 text-sm">{actionAmount} BTC sent to your wallet</p>
+                <p className="text-yellow-400 font-semibold">✓ BTC Withdrawn Successfully!</p>
+                <p className="text-yellow-300 text-sm mt-1">📤 Withdrawn: {actionAmount} BTC</p>
+                <p className="text-yellow-300 text-sm">💼 Vault balance: {collateralBalance} BTC (remaining)</p>
+                <p className="text-yellow-300 text-sm">✨ BTC is now back in your wallet</p>
                 {withdrawHash && (
                   <a 
                     href={`https://explorer.test.mezo.org/tx/${withdrawHash}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-green-300 text-xs underline hover:text-green-200"
+                    className="text-yellow-300 text-xs underline hover:text-yellow-200 inline-block mt-1"
                   >
-                    View on Explorer
+                    📄 View Transaction on Explorer →
                   </a>
                 )}
               </div>

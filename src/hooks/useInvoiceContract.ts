@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useAccount, useContractRead, useContractWrite, useWaitForTransaction } from 'wagmi';
+import { useAccount, useContractRead, useContractWrite, useWaitForTransactionReceipt } from 'wagmi';
 import { parseEther, formatEther } from 'viem';
 import toast from 'react-hot-toast';
 import { 
@@ -89,10 +89,10 @@ export function useInvoiceContract(): UseInvoiceContractReturn {
   });
   
   // Wait for transactions
-  const { isLoading: isCreating } = useWaitForTransaction({
-    hash: createTxData?.hash,
+  const { isLoading: isCreating } = useWaitForTransactionReceipt({
+    hash: createTxData,
     onSuccess: () => {
-      setCreateTx({ status: 'success', hash: createTxData?.hash });
+      setCreateTx({ status: 'success', hash: createTxData });
       toast.success('Invoice created successfully!');
       refreshData();
     },
@@ -102,10 +102,10 @@ export function useInvoiceContract(): UseInvoiceContractReturn {
     },
   });
   
-  const { isLoading: isConfirming } = useWaitForTransaction({
-    hash: confirmTxData?.hash,
+  const { isLoading: isConfirming } = useWaitForTransactionReceipt({
+    hash: confirmTxData,
     onSuccess: () => {
-      setConfirmTx({ status: 'success', hash: confirmTxData?.hash });
+      setConfirmTx({ status: 'success', hash: confirmTxData });
       toast.success('Payment confirmed!');
       refreshData();
     },
@@ -115,10 +115,10 @@ export function useInvoiceContract(): UseInvoiceContractReturn {
     },
   });
   
-  const { isLoading: isCancelling } = useWaitForTransaction({
-    hash: cancelTxData?.hash,
+  const { isLoading: isCancelling } = useWaitForTransactionReceipt({
+    hash: cancelTxData,
     onSuccess: () => {
-      setCancelTx({ status: 'success', hash: cancelTxData?.hash });
+      setCancelTx({ status: 'success', hash: cancelTxData });
       toast.success('Invoice cancelled!');
       refreshData();
     },
@@ -152,6 +152,20 @@ export function useInvoiceContract(): UseInvoiceContractReturn {
       txHash,
     };
   }, []);
+
+  // Read all invoices from blockchain
+  const { data: allBlockchainInvoices, refetch: refetchAllInvoices } = useContractRead({
+    address: MEZO_CONTRACTS.INVOICE_CONTRACT as `0x${string}`,
+    abi: INVOICE_CONTRACT_ABI,
+    functionName: 'getAllInvoices',
+    enabled: true, // Fetch all invoices regardless of wallet connection
+  });
+
+  const { data: invoiceCountData } = useContractRead({
+    address: MEZO_CONTRACTS.INVOICE_CONTRACT as `0x${string}`,
+    abi: INVOICE_CONTRACT_ABI,
+    functionName: 'invoiceCount',
+  });
   
   // Fetch individual invoice details
   const fetchInvoiceDetails = useCallback(async (invoiceId: number): Promise<BlockchainInvoice | null> => {
@@ -165,26 +179,74 @@ export function useInvoiceContract(): UseInvoiceContractReturn {
     }
   }, []);
   
+  // Fetch and convert all invoices from blockchain
+  useEffect(() => {
+    if (allBlockchainInvoices && Array.isArray(allBlockchainInvoices)) {
+      try {
+        const convertedInvoices = allBlockchainInvoices.map((invoice) => {
+          const blockchainInvoice: BlockchainInvoice = {
+            id: Number(invoice.id),
+            creator: invoice.creator,
+            recipient: invoice.recipient,
+            amount: invoice.amount.toString(),
+            description: invoice.description,
+            bitcoinAddress: invoice.bitcoinAddress,
+            clientName: invoice.clientName,
+            clientCode: invoice.clientCode,
+            paid: invoice.paid,
+            cancelled: invoice.cancelled,
+            createdAt: Number(invoice.createdAt),
+            paidAt: Number(invoice.paidAt),
+          };
+          
+          return convertBlockchainInvoice(blockchainInvoice);
+        });
+        
+        setInvoices(convertedInvoices);
+        
+        // Update payment history
+        const paidInvoices = convertedInvoices.filter(inv => inv.status === 'paid').map(inv => ({
+          id: inv.id,
+          type: 'received' as const,
+          counterparty: inv.clientName,
+          amount: inv.amount,
+          date: inv.paidAt || inv.createdAt,
+          status: 'confirmed' as const,
+          bitcoinAddress: inv.bitcoinAddress,
+          txHash: inv.paymentTxHash,
+        }));
+        setPaymentHistory(paidInvoices);
+        
+      } catch (error) {
+        console.error('Error converting invoices:', error);
+        setError('Failed to load invoices');
+      }
+    }
+  }, [allBlockchainInvoices, convertBlockchainInvoice]);
+
   // Refresh all data
   const refreshData = useCallback(async () => {
-    if (!address || !isConnected) return;
-    
     setIsLoading(true);
     setError(null);
     
     try {
-      // Refetch user invoices
-      await refetchUserInvoices();
+      // Refetch all invoices
+      await refetchAllInvoices();
+      if (address && isConnected) {
+        await refetchUserInvoices();
+      }
       
       // Update stats
-      setStats(prev => ({
-        ...prev,
+      const totalCount = invoiceCountData ? Number(invoiceCountData) : 0;
+      const paidCount = invoices.filter(inv => inv.status === 'paid').length;
+      
+      setStats({
         totalRevenue: totalRevenue ? parseFloat(formatEther(totalRevenue)) : 0,
         pendingAmount: pendingAmount ? parseFloat(formatEther(pendingAmount)) : 0,
-        totalInvoices: totalInvoices ? Number(totalInvoices) : 0,
-        activeInvoices: totalInvoices && totalInvoices > 0 ? Number(totalInvoices) - (paymentHistory.length || 0) : 0,
-        paidInvoices: paymentHistory.length || 0,
-      }));
+        totalInvoices: totalCount,
+        activeInvoices: totalCount - paidCount,
+        paidInvoices: paidCount,
+      });
       
     } catch (error) {
       console.error('Error refreshing data:', error);
@@ -192,7 +254,7 @@ export function useInvoiceContract(): UseInvoiceContractReturn {
     } finally {
       setIsLoading(false);
     }
-  }, [address, isConnected, refetchUserInvoices, totalRevenue, pendingAmount, totalInvoices, paymentHistory.length]);
+  }, [refetchAllInvoices, refetchUserInvoices, totalRevenue, pendingAmount, invoiceCountData, invoices]);
   
   // Create invoice
   const createInvoice = useCallback(async (data: InvoiceFormData) => {
@@ -284,7 +346,7 @@ export function useInvoiceContract(): UseInvoiceContractReturn {
         
         // Find the invoice
         const invoice = invoices.find(inv => inv.id === event.invoiceId);
-        if (invoice && invoice.status === 'pending') {
+        if (invoice && invoice.status === 'pending' && address === invoice.creator) {
           // Auto-confirm the payment
           confirmPayment(event.invoiceId);
           
@@ -294,23 +356,52 @@ export function useInvoiceContract(): UseInvoiceContractReturn {
       }
     };
 
+    const handlePaymentConfirmed = (event: PaymentEvent) => {
+      if (event.type === 'payment_confirmed') {
+        console.log('✅ Payment confirmed for invoice:', event.invoiceId);
+        // Refresh data after payment confirmation
+        refreshData();
+      }
+    };
+
     // Set up payment monitor callbacks
     paymentMonitor.setCallbacks({
       onPaymentDetected: handlePaymentDetected,
+      onPaymentConfirmed: handlePaymentConfirmed,
     });
 
     return () => {
       // Clean up callbacks
       paymentMonitor.setCallbacks({});
     };
-  }, [invoices, confirmPayment]);
+  }, [invoices, confirmPayment, address, refreshData]);
 
-  // Load data when wallet connects
+  // Start monitoring for all pending invoices
   useEffect(() => {
-    if (address && isConnected) {
-      refreshData();
-    }
-  }, [address, isConnected, refreshData]);
+    invoices.forEach(invoice => {
+      if (invoice.status === 'pending' && invoice.bitcoinAddress && address === invoice.creator) {
+        console.log('👀 Starting monitoring for invoice:', invoice.id);
+        paymentMonitor.subscribeToAddress({
+          address: invoice.bitcoinAddress,
+          invoiceId: invoice.id,
+        });
+      }
+    });
+
+    return () => {
+      // Cleanup all subscriptions when component unmounts
+      invoices.forEach(invoice => {
+        if (invoice.bitcoinAddress) {
+          paymentMonitor.unsubscribeFromAddress(invoice.bitcoinAddress);
+        }
+      });
+    };
+  }, [invoices, address]);
+
+  // Load data on mount
+  useEffect(() => {
+    refreshData();
+  }, []);
   
   return {
     // Data

@@ -7,6 +7,7 @@ import { QueryClientProvider, QueryClient } from '@tanstack/react-query'
 import { WalletProvider } from './contexts/WalletContext'
 import App from './App.tsx'
 import './index.css'
+import '../index.css'
 
 // Define Mezo Testnet chain configuration
 export const mezoTestnet = {
