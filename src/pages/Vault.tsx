@@ -46,6 +46,45 @@ export function Vault() {
     sendBitcoinHash,
   } = useMezoVault();
 
+  // Visual configuration for action buttons (colors and icons)
+  const actionStyles: Record<Exclude<VaultAction, null>, { bg: string; border: string; hoverBg: string; hoverBorder: string; iconClass: string; }> = {
+    deposit: {
+      bg: 'bg-blue-500/20',
+      border: 'border-blue-400/30',
+      hoverBg: 'hover:bg-blue-500/30',
+      hoverBorder: 'hover:border-blue-400/50',
+      iconClass: 'fa-solid fa-circle-down',
+    },
+    borrow: {
+      bg: 'bg-green-500/20',
+      border: 'border-green-400/30',
+      hoverBg: 'hover:bg-green-500/30',
+      hoverBorder: 'hover:border-green-400/50',
+      iconClass: 'fa-solid fa-hand-holding-dollar',
+    },
+    repay: {
+      bg: 'bg-yellow-500/20',
+      border: 'border-yellow-400/30',
+      hoverBg: 'hover:bg-yellow-500/30',
+      hoverBorder: 'hover:border-yellow-400/50',
+      iconClass: 'fa-solid fa-rotate-left',
+    },
+    withdraw: {
+      bg: 'bg-orange-500/20',
+      border: 'border-orange-400/30',
+      hoverBg: 'hover:bg-orange-500/30',
+      hoverBorder: 'hover:border-orange-400/50',
+      iconClass: 'fa-solid fa-arrow-up-from-bracket',
+    },
+    send: {
+      bg: 'bg-purple-500/20',
+      border: 'border-purple-400/30',
+      hoverBg: 'hover:bg-purple-500/30',
+      hoverBorder: 'hover:border-purple-400/50',
+      iconClass: 'fa-solid fa-paper-plane',
+    },
+  };
+
   const handleAction = async () => {
     if (!activeAction || !actionAmount) return;
     
@@ -138,59 +177,32 @@ export function Vault() {
 
   return (
     <div className="flex-1 h-screen overflow-y-auto p-4 sm:p-6 lg:p-8">
-      <div className="mb-6 lg:mb-8">
-        <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold mb-2 font-title">Vault</h1>
-        <p className="text-sm sm:text-base text-white/60">Manage your collateral and borrowing</p>
+      <div className="mb-6">
+        <h1 className="text-2xl sm:text-3xl font-bold mb-2 font-navbar text-white">Vault</h1>
+        <p className="text-sm font-navbar text-white/60">Manage your collateral and borrowing</p>
       </div>
 
-      {/* Educational Section */}
-      <div className="max-w-2xl mx-auto mb-8 glass p-6 rounded-2xl border border-white/10">
-        <h2 className="text-xl font-bold mb-3 text-green-400">💰 How the Vault Works</h2>
-        <div className="space-y-3 text-sm text-white/80">
-          <div className="flex items-start gap-3">
-            <span className="text-2xl">1️⃣</span>
-            <div>
-              <p className="font-semibold">Deposit BTC</p>
-              <p className="text-white/60">Lock your Bitcoin in the vault as collateral (you keep ownership)</p>
-            </div>
-          </div>
-          <div className="flex items-start gap-3">
-            <span className="text-2xl">2️⃣</span>
-            <div>
-              <p className="font-semibold">Borrow MUSD</p>
-              <p className="text-white/60">Get stablecoins to spend, trade, or use in DeFi - at 2.5% fixed APR</p>
-            </div>
-          </div>
-          <div className="flex items-start gap-3">
-            <span className="text-2xl">3️⃣</span>
-            <div>
-              <p className="font-semibold">Spend Your MUSD</p>
-              <p className="text-white/60">Use MUSD anywhere - send to anyone, use in other DeFi apps, or convert to cash</p>
-            </div>
-          </div>
-          <div className="flex items-start gap-3">
-            <span className="text-2xl">4️⃣</span>
-            <div>
-              <p className="font-semibold">Repay & Withdraw</p>
-              <p className="text-white/60">Pay back when you want (no deadlines), get your BTC back</p>
-            </div>
-          </div>
-        </div>
-        <div className="mt-4 p-4 bg-green-500/10 border border-green-500/20 rounded-lg">
-          <p className="text-green-400 font-semibold mb-1">✨ Benefits:</p>
-          <ul className="text-sm text-white/70 space-y-1">
-            <li>✅ Keep your BTC (HODL) while accessing liquidity</li>
-            <li>✅ Low 2.5% fixed interest (vs 8-20% variable rates elsewhere)</li>
-            <li>✅ No repayment deadlines - pay back whenever</li>
-            <li>✅ 90% of collateral value available to borrow</li>
-            <li>✅ Use MUSD anywhere or cash out anytime</li>
-          </ul>
+      {/* Primary Actions - moved to top */}
+      <div className="max-w-2xl mx-auto mb-6">
+        <div className="flex flex-nowrap gap-2 overflow-x-auto no-scrollbar">
+          {(['deposit', 'borrow', 'repay', 'withdraw', 'send'] as const).map((actionKey) => (
+            <button
+              key={actionKey}
+              onClick={() => setActiveAction(actionKey)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-navbar text-white ${actionStyles[actionKey].bg} border ${actionStyles[actionKey].border} ${actionStyles[actionKey].hoverBg} ${actionStyles[actionKey].hoverBorder} transition-all duration-200 capitalize whitespace-nowrap`}
+            >
+              <span className="w-7 h-7 rounded-full border border-white/30 flex items-center justify-center bg-white/10">
+                <i className={`${actionStyles[actionKey].iconClass} text-white text-xs`}></i>
+              </span>
+              {actionKey}
+            </button>
+          ))}
         </div>
       </div>
 
-      <div className="max-w-2xl mx-auto space-y-8">
+      <div className="max-w-2xl mx-auto space-y-6">
         {/* Circular Gauge */}
-        <div className="glass p-8 rounded-3xl border border-white/10 flex flex-col items-center">
+        <div className="bg-[#2C2C2E]/40 backdrop-blur-xl p-8 rounded-3xl border border-green-400/10 flex flex-col items-center">
           <div className="relative w-48 h-48 mb-6">
             <svg className="w-full h-full transform -rotate-90">
               <circle
@@ -213,9 +225,9 @@ export function Vault() {
               />
             </svg>
             <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <p className="text-4xl font-bold">{vaultData?.collateralRatio || 0}%</p>
+              <p className="text-4xl font-bold font-navbar">{vaultData?.collateralRatio || 0}%</p>
               <div className="flex items-center gap-1">
-                <p className="text-sm text-white/60">Collateral Ratio</p>
+                <p className="text-sm font-navbar text-white/60">Collateral Ratio</p>
                 <div className="group relative">
                   <Info className="w-3 h-3 text-white/40 hover:text-white/60 cursor-help" />
                   <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-48 bg-black/90 backdrop-blur-sm border border-white/20 rounded-lg p-3 text-xs opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-10">
@@ -237,8 +249,8 @@ export function Vault() {
                   </div>
                 </div>
               </div>
-              <p className="text-xl font-bold">{collateralBalance} BTC</p>
-              <p className="text-xs text-white/50">Wallet: {walletBtcBalance} BTC</p>
+              <p className="text-xl font-bold font-navbar">{collateralBalance} BTC</p>
+              <p className="text-xs font-navbar text-white/50">Wallet: {walletBtcBalance} BTC</p>
             </div>
             <div className="text-center border-x border-white/10">
               <div className="flex items-center justify-center gap-1 mb-1">
@@ -250,7 +262,7 @@ export function Vault() {
                   </div>
                 </div>
               </div>
-              <p className="text-xl font-bold">{vaultData?.borrowedAmount || '0'}</p>
+              <p className="text-xl font-bold font-navbar">{vaultData?.borrowedAmount || '0'}</p>
             </div>
             <div className="text-center">
               <div className="flex items-center justify-center gap-1 mb-1">
@@ -262,71 +274,37 @@ export function Vault() {
                   </div>
                 </div>
               </div>
-              <p className={`text-xl font-bold ${getRiskColor(getRiskLevel())}`}>
+              <p className={`text-xl font-bold font-navbar ${getRiskColor(getRiskLevel())}`}>
                 {getRiskLevel().charAt(0).toUpperCase() + getRiskLevel().slice(1)}
               </p>
             </div>
           </div>
         </div>
 
-        {/* Action Buttons */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-          {(['deposit', 'borrow', 'repay', 'withdraw', 'send'] as const).map((action) => {
-            const getActionDescription = (action: string) => {
-              switch (action) {
-                case 'deposit':
-                  return 'Put Bitcoin in to get money';
-                case 'borrow':
-                  return 'Get money using your Bitcoin';
-                case 'repay':
-                  return 'Pay back the money you borrowed';
-                case 'withdraw':
-                  return 'Take out extra Bitcoin';
-                case 'send':
-                  return 'Send Bitcoin to any address';
-                default:
-                  return '';
-              }
-            };
-
-            return (
-              <div key={action} className="group relative">
-                <Button
-                  onClick={() => setActiveAction(action)}
-                  className="glass-hover border border-white/20 h-20 flex flex-col items-center justify-center gap-2 w-full"
-                >
-                  <span className="text-lg font-semibold capitalize">{action}</span>
-                </Button>
-                <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-48 bg-black/90 backdrop-blur-sm border border-white/20 rounded-lg p-3 text-xs opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-10">
-                  <p className="text-white/90">{getActionDescription(action)}</p>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+        {/* Action Buttons (removed from here; moved to top) */}
 
         {/* Value Display */}
-        <div className="glass p-6 rounded-2xl border border-white/10">
+        <div className="bg-[#2C2C2E]/40 backdrop-blur-xl p-6 rounded-2xl border border-green-400/10">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-white/60 mb-1">MUSD Balance</p>
-              <p className="text-3xl font-bold">{musdBalance} MUSD</p>
+              <p className="text-sm font-navbar text-white/60 mb-1">MUSD Balance</p>
+              <p className="text-3xl font-bold font-navbar">{musdBalance} MUSD</p>
               {parseFloat(musdBalance) > 0 && (
-                <p className="text-xs text-green-400 mt-1">✓ Available to spend or withdraw</p>
+                <p className="text-xs font-navbar text-green-400 mt-1">✓ Available to spend or withdraw</p>
               )}
             </div>
             <div className="text-right">
-              <p className="text-sm text-white/60 mb-1">Interest Rate</p>
-              <p className="text-2xl font-bold text-green-400">{vaultData?.interestRate || 0}%</p>
+              <p className="text-sm font-navbar text-white/60 mb-1">Interest Rate</p>
+              <p className="text-2xl font-bold font-navbar text-green-400">{vaultData?.interestRate || 0}%</p>
             </div>
           </div>
         </div>
 
         {/* MUSD Usage Guide */}
         {parseFloat(musdBalance) > 0 && (
-          <div className="glass p-6 rounded-2xl border border-blue-500/20 bg-blue-500/10">
-            <h3 className="text-lg font-bold mb-3 text-blue-400">💡 How to Use Your MUSD</h3>
-            <div className="space-y-2 text-sm text-white/80">
+          <div className="bg-[#2C2C2E]/40 backdrop-blur-xl p-6 rounded-2xl border border-green-400/20 bg-green-500/10">
+            <h3 className="text-lg font-bold mb-3 font-navbar text-green-400">💡 How to Use Your MUSD</h3>
+            <div className="space-y-2 text-sm font-navbar text-white/80">
               <div className="flex items-start gap-2">
                 <span className="text-green-400">✓</span>
                 <p><strong>Send to Others:</strong> Use the "Send" button below to transfer MUSD to any Mezo address</p>
@@ -352,62 +330,62 @@ export function Vault() {
 
         {/* Error Display */}
         {error && (
-          <div className="glass p-4 rounded-2xl border border-red-500/20 bg-red-500/10">
+          <div className="bg-[#2C2C2E]/40 backdrop-blur-xl p-4 rounded-2xl border border-red-500/20 bg-red-500/10">
             <div className="flex items-center gap-2">
               <AlertCircle className="w-5 h-5 text-red-400" />
-              <p className="text-red-400">{error}</p>
+              <p className="text-red-400 font-navbar">{error}</p>
             </div>
           </div>
         )}
 
         {/* Pending Transaction Notifications - Stage-Specific */}
         {depositHash && isPending && (
-          <div className="glass p-4 rounded-2xl border border-orange-500/20 bg-orange-500/10">
+          <div className="bg-[#2C2C2E]/40 backdrop-blur-xl p-4 rounded-2xl border border-green-500/20 bg-green-500/10">
             <div className="flex items-center gap-2">
-              <Loader2 className="w-5 h-5 text-orange-400 animate-spin" />
+              <Loader2 className="w-5 h-5 text-green-400 animate-spin" />
               <div>
-                <p className="text-orange-400 font-semibold">📤 Depositing {actionAmount} BTC...</p>
-                <p className="text-orange-300 text-sm">Your BTC is being secured in the vault</p>
-                <a href={`https://explorer.test.mezo.org/tx/${depositHash}`} target="_blank" rel="noopener noreferrer" className="text-orange-300 text-xs underline hover:text-orange-200 inline-block mt-1">📄 View Transaction →</a>
+                <p className="text-green-400 font-semibold font-navbar">📤 Depositing {actionAmount} BTC...</p>
+                <p className="text-green-300 text-sm font-navbar">Your BTC is being secured in the vault</p>
+                <a href={`https://explorer.test.mezo.org/tx/${depositHash}`} target="_blank" rel="noopener noreferrer" className="text-green-300 text-xs font-navbar underline hover:text-green-200 inline-block mt-1">📄 View Transaction →</a>
               </div>
             </div>
           </div>
         )}
         
         {borrowHash && isPending && (
-          <div className="glass p-4 rounded-2xl border border-orange-500/20 bg-orange-500/10">
+          <div className="bg-[#2C2C2E]/40 backdrop-blur-xl p-4 rounded-2xl border border-green-500/20 bg-green-500/10">
             <div className="flex items-center gap-2">
-              <Loader2 className="w-5 h-5 text-orange-400 animate-spin" />
+              <Loader2 className="w-5 h-5 text-green-400 animate-spin" />
               <div>
-                <p className="text-orange-400 font-semibold">💰 Borrowing {actionAmount} MUSD...</p>
-                <p className="text-orange-300 text-sm">Minting MUSD tokens for your wallet</p>
-                <a href={`https://explorer.test.mezo.org/tx/${borrowHash}`} target="_blank" rel="noopener noreferrer" className="text-orange-300 text-xs underline hover:text-orange-200 inline-block mt-1">📄 View Transaction →</a>
+                <p className="text-green-400 font-semibold font-navbar">💰 Borrowing {actionAmount} MUSD...</p>
+                <p className="text-green-300 text-sm font-navbar">Minting MUSD tokens for your wallet</p>
+                <a href={`https://explorer.test.mezo.org/tx/${borrowHash}`} target="_blank" rel="noopener noreferrer" className="text-green-300 text-xs font-navbar underline hover:text-green-200 inline-block mt-1">📄 View Transaction →</a>
               </div>
             </div>
           </div>
         )}
         
         {repayHash && isPending && (
-          <div className="glass p-4 rounded-2xl border border-orange-500/20 bg-orange-500/10">
+          <div className="bg-[#2C2C2E]/40 backdrop-blur-xl p-4 rounded-2xl border border-green-500/20 bg-green-500/10">
             <div className="flex items-center gap-2">
-              <Loader2 className="w-5 h-5 text-orange-400 animate-spin" />
+              <Loader2 className="w-5 h-5 text-green-400 animate-spin" />
               <div>
-                <p className="text-orange-400 font-semibold">💸 Repaying {actionAmount} MUSD...</p>
-                <p className="text-orange-300 text-sm">Burning MUSD tokens and clearing your debt</p>
-                <a href={`https://explorer.test.mezo.org/tx/${repayHash}`} target="_blank" rel="noopener noreferrer" className="text-orange-300 text-xs underline hover:text-orange-200 inline-block mt-1">📄 View Transaction →</a>
+                <p className="text-green-400 font-semibold font-navbar">💸 Repaying {actionAmount} MUSD...</p>
+                <p className="text-green-300 text-sm font-navbar">Burning MUSD tokens and clearing your debt</p>
+                <a href={`https://explorer.test.mezo.org/tx/${repayHash}`} target="_blank" rel="noopener noreferrer" className="text-green-300 text-xs font-navbar underline hover:text-green-200 inline-block mt-1">📄 View Transaction →</a>
               </div>
             </div>
           </div>
         )}
         
         {withdrawHash && isPending && (
-          <div className="glass p-4 rounded-2xl border border-orange-500/20 bg-orange-500/10">
+          <div className="bg-[#2C2C2E]/40 backdrop-blur-xl p-4 rounded-2xl border border-green-500/20 bg-green-500/10">
             <div className="flex items-center gap-2">
-              <Loader2 className="w-5 h-5 text-orange-400 animate-spin" />
+              <Loader2 className="w-5 h-5 text-green-400 animate-spin" />
               <div>
-                <p className="text-orange-400 font-semibold">📥 Withdrawing {actionAmount} BTC...</p>
-                <p className="text-orange-300 text-sm">Returning your BTC from vault to wallet</p>
-                <a href={`https://explorer.test.mezo.org/tx/${withdrawHash}`} target="_blank" rel="noopener noreferrer" className="text-orange-300 text-xs underline hover:text-orange-200 inline-block mt-1">📄 View Transaction →</a>
+                <p className="text-green-400 font-semibold font-navbar">📥 Withdrawing {actionAmount} BTC...</p>
+                <p className="text-green-300 text-sm font-navbar">Returning your BTC from vault to wallet</p>
+                <a href={`https://explorer.test.mezo.org/tx/${withdrawHash}`} target="_blank" rel="noopener noreferrer" className="text-green-300 text-xs font-navbar underline hover:text-green-200 inline-block mt-1">📄 View Transaction →</a>
               </div>
             </div>
           </div>
@@ -415,11 +393,11 @@ export function Vault() {
 
         {/* Action-Specific Success Popups */}
         {isDepositSuccess && (
-          <div className="glass p-4 rounded-2xl border border-green-500/20 bg-green-500/10 animate-pulse">
+          <div className="bg-[#2C2C2E]/40 backdrop-blur-xl p-4 rounded-2xl border border-green-500/20 bg-green-500/10">
             <div className="flex items-center gap-2">
               <CheckCircle className="w-5 h-5 text-green-400" />
               <div>
-                <p className="text-green-400 font-semibold">✓ BTC Deposited Successfully!</p>
+                <p className="text-green-400 font-semibold font-navbar">✓ BTC Deposited Successfully!</p>
                 <p className="text-green-300 text-sm mt-1">📦 Vault now holds: {collateralBalance} BTC</p>
                 <p className="text-green-300 text-sm">💼 Available to borrow: ~{Math.floor(parseFloat(collateralBalance) * 50000 * 0.9)} MUSD</p>
                 <p className="text-green-300 text-sm">🔒 Collateral ratio: {collateralRatio.toFixed(2)}% (Safe)</p>
@@ -542,8 +520,8 @@ export function Vault() {
       {/* Action Modal */}
       {activeAction && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="glass p-8 rounded-3xl border border-white/20 w-full max-w-md mx-auto">
-            <h2 className="text-2xl font-bold mb-6 font-title">{getActionTitle()}</h2>
+          <div className="bg-[#2C2C2E]/90 backdrop-blur-xl p-8 rounded-3xl border border-green-400/20 w-full max-w-md mx-auto">
+            <h2 className="text-2xl font-bold mb-6 font-navbar text-white">{getActionTitle()}</h2>
 
             <div className="space-y-4 mb-6">
               {/* Recipient Address Field for Send Action */}

@@ -60,7 +60,7 @@ function App() {
 
   return (
     <>
-      <div className="flex h-screen bg-background text-foreground overflow-hidden">
+      <div className="flex h-screen bg-[#1C1C1E] text-foreground overflow-hidden">
         {/* Sidebar */}
         <Sidebar 
           activeTab={activeTab} 

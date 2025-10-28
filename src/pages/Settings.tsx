@@ -192,12 +192,12 @@ export function Settings() {
     return (
       <div className="flex-1 h-screen overflow-y-auto p-8">
         <div className="max-w-2xl mx-auto mt-20">
-          <div className="glass-card p-12 rounded-2xl border border-border/20 text-center">
-            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 flex items-center justify-center">
-              <Wallet className="w-8 h-8 text-white" />
+          <div className="bg-[#2C2C2E]/40 backdrop-blur-xl p-12 rounded-2xl border border-green-400/10 text-center">
+            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-green-500/10 border border-green-400/30 flex items-center justify-center">
+              <i className="fa-solid fa-wallet text-green-400 text-2xl"></i>
             </div>
-            <h2 className="text-2xl font-bold font-title mb-2">Connect Your Wallet</h2>
-            <p className="text-foreground/60 mb-6">
+            <h2 className="text-2xl font-bold font-navbar mb-2 text-white">Connect Your Wallet</h2>
+            <p className="text-white/60 mb-6 font-navbar">
               Please connect your wallet to access settings and customize your profile
             </p>
           </div>
@@ -210,8 +210,8 @@ export function Settings() {
     <div className="flex-1 h-screen overflow-y-auto p-4 sm:p-6 lg:p-8">
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold mb-2 font-title">Settings</h1>
-          <p className="text-xs sm:text-sm lg:text-base text-foreground/60">Manage your profile and preferences</p>
+          <h1 className="text-2xl sm:text-3xl font-bold mb-2 font-navbar text-white">Settings</h1>
+          <p className="text-sm font-navbar text-white/60">Manage your profile and preferences</p>
         </div>
         <AutoSaveIndicator status={saveStatus} />
       </div>
@@ -226,20 +226,20 @@ export function Settings() {
           iconColor="text-green-400"
         >
           <div className="space-y-4">
-            <div className="flex items-center justify-between p-4 rounded-xl bg-muted/50 border border-border/20">
+            <div className="flex items-center justify-between p-4 rounded-xl bg-[#2C2C2E]/20 border border-green-400/10">
               <div>
-                <p className="text-sm text-foreground/60 mb-1">Connected Wallet</p>
-                <p className="font-mono text-sm">{formatAddress(address!)}</p>
+                <p className="text-sm text-white/60 mb-1 font-navbar">Connected Wallet</p>
+                <p className="font-mono text-sm text-white">{formatAddress(address!)}</p>
               </div>
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 rounded-full bg-green-400"></div>
-                <span className="text-xs text-green-400">Connected</span>
+                <span className="text-xs text-green-400 font-navbar">Connected</span>
               </div>
             </div>
-            <div className="flex items-center justify-between p-4 rounded-xl bg-muted/50 border border-border/20">
+            <div className="flex items-center justify-between p-4 rounded-xl bg-[#2C2C2E]/20 border border-green-400/10">
               <div>
-                <p className="text-sm text-foreground/60 mb-1">Network</p>
-                <p className="text-sm font-medium">{getNetworkName(chainId)}</p>
+                <p className="text-sm text-white/60 mb-1 font-navbar">Network</p>
+                <p className="text-sm font-medium text-white font-navbar">{getNetworkName(chainId)}</p>
               </div>
             </div>
           </div>
@@ -255,39 +255,39 @@ export function Settings() {
         >
           <div className="space-y-4">
             {/* Avatar Preview */}
-            <div className="flex items-center gap-4 pb-4 border-b border-border/20">
-              <div className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-xl font-bold shadow-lg">
+            <div className="flex items-center gap-4 pb-4 border-b border-green-400/10">
+              <div className="w-16 h-16 rounded-full bg-green-500/10 border border-green-400/30 flex items-center justify-center text-white text-xl font-bold shadow-lg">
                 {getInitials(name || businessName)}
               </div>
               <div>
-                <p className="text-sm font-medium">{name || 'User'}</p>
-                <p className="text-xs text-foreground/60">{businessName || 'No business name set'}</p>
+                <p className="text-sm font-medium text-white font-navbar">{name || 'User'}</p>
+                <p className="text-xs text-white/60 font-navbar">{businessName || 'No business name set'}</p>
               </div>
             </div>
 
             <div>
-              <Label htmlFor="name" className="text-sm text-foreground/70 mb-2 block">
+              <Label htmlFor="name" className="text-sm text-white/70 mb-2 block font-navbar">
                 Display Name
               </Label>
               <Input
                 id="name"
                 value={name}
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)}
-                className="glass border-border/20 focus:border-border/40"
+                className="bg-[#2C2C2E]/40 backdrop-blur-xl border border-green-400/20 focus:border-green-400/40 text-white placeholder:text-white/40"
                 placeholder="Enter your display name"
                 disabled={!isConnected}
               />
             </div>
 
             <div>
-              <Label htmlFor="businessName" className="text-sm text-foreground/70 mb-2 block">
+              <Label htmlFor="businessName" className="text-sm text-white/70 mb-2 block font-navbar">
                 Business/Company Name (Optional)
               </Label>
               <Input
                 id="businessName"
                 value={businessName}
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => setBusinessName(e.target.value)}
-                className="glass border-border/20 focus:border-border/40"
+                className="bg-[#2C2C2E]/40 backdrop-blur-xl border border-green-400/20 focus:border-green-400/40 text-white placeholder:text-white/40"
                 placeholder="Enter business name"
                 disabled={!isConnected}
               />
@@ -305,14 +305,14 @@ export function Settings() {
         >
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <Label htmlFor="paymentTerms" className="text-sm text-foreground/70 mb-2 block">
+              <Label htmlFor="paymentTerms" className="text-sm text-white/70 mb-2 block font-navbar">
                 Default Payment Terms (days)
               </Label>
               <select
                 id="paymentTerms"
                 value={defaultPaymentTerms}
                 onChange={(e) => setDefaultPaymentTerms(Number(e.target.value))}
-                className="w-full p-3 rounded-lg glass border border-border/20 focus:border-border/40 bg-background text-foreground"
+                className="w-full p-3 rounded-lg bg-[#2C2C2E]/40 backdrop-blur-xl border border-green-400/20 focus:border-green-400/40 text-white"
                 disabled={!isConnected}
               >
                 <option value="7">7 days</option>
@@ -324,7 +324,7 @@ export function Settings() {
             </div>
 
             <div>
-              <Label htmlFor="taxRate" className="text-sm text-foreground/70 mb-2 block">
+              <Label htmlFor="taxRate" className="text-sm text-white/70 mb-2 block font-navbar">
                 Default Tax Rate (%)
               </Label>
               <Input
@@ -335,7 +335,7 @@ export function Settings() {
                 step="0.1"
                 value={defaultTaxRate}
                 onChange={(e) => setDefaultTaxRate(parseFloat(e.target.value) || 0)}
-                className="glass border-border/20 focus:border-border/40"
+                className="bg-[#2C2C2E]/40 backdrop-blur-xl border border-green-400/20 focus:border-green-400/40 text-white placeholder:text-white/40"
                 placeholder="0"
                 disabled={!isConnected}
               />
@@ -353,14 +353,14 @@ export function Settings() {
         >
           <div className="space-y-4">
             <div>
-              <Label htmlFor="currency" className="text-sm text-foreground/70 mb-2 block">
+              <Label htmlFor="currency" className="text-sm text-white/70 mb-2 block font-navbar">
                 Default Currency
               </Label>
               <select
                 id="currency"
                 value={currency}
                 onChange={(e) => setCurrency(e.target.value)}
-                className="w-full p-3 rounded-lg glass border border-border/20 focus:border-border/40 bg-background text-foreground"
+                className="w-full p-3 rounded-lg bg-[#2C2C2E]/40 backdrop-blur-xl border border-green-400/20 focus:border-green-400/40 text-white"
                 disabled={!isConnected}
               >
                 <option value="USD">USD</option>
@@ -370,12 +370,12 @@ export function Settings() {
               </select>
             </div>
 
-            <div className="flex items-center justify-between p-4 rounded-xl bg-muted/50 border border-border/20">
+            <div className="flex items-center justify-between p-4 rounded-xl bg-[#2C2C2E]/20 border border-green-400/10">
               <div className="flex-1">
-                <Label htmlFor="notifications" className="text-sm font-medium">
+                <Label htmlFor="notifications" className="text-sm font-medium text-white font-navbar">
                   Browser Notifications
                 </Label>
-                <p className="text-xs text-foreground/60 mt-1">
+                <p className="text-xs text-white/60 mt-1 font-navbar">
                   Get notified about payments and invoice updates
                 </p>
               </div>
@@ -402,12 +402,12 @@ export function Settings() {
             <button
               onClick={handleExport}
               disabled={!isConnected}
-              className="w-full flex items-center gap-3 p-4 rounded-xl bg-muted/50 border border-border/20 hover:border-orange-400/40 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full flex items-center gap-3 p-4 rounded-xl bg-[#2C2C2E]/20 border border-green-400/10 hover:border-green-400/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Download className="w-5 h-5 text-orange-400" />
+              <i className="fa-solid fa-download text-green-400"></i>
               <div className="text-left flex-1">
-                <p className="text-sm font-medium">Export All Data</p>
-                <p className="text-xs text-foreground/60">
+                <p className="text-sm font-medium text-white font-navbar">Export All Data</p>
+                <p className="text-xs text-white/60 font-navbar">
                   Download your settings and invoices as JSON
                 </p>
               </div>
@@ -416,12 +416,12 @@ export function Settings() {
             <button
               onClick={handleClearData}
               disabled={!isConnected}
-              className="w-full flex items-center gap-3 p-4 rounded-xl bg-muted/50 border border-red-500/20 hover:border-red-500/40 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full flex items-center gap-3 p-4 rounded-xl bg-[#2C2C2E]/20 border border-red-500/20 hover:border-red-500/40 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Trash2 className="w-5 h-5 text-red-400" />
+              <i className="fa-solid fa-trash text-red-400"></i>
               <div className="text-left flex-1">
-                <p className="text-sm font-medium text-red-400">Clear All Settings</p>
-                <p className="text-xs text-foreground/60">
+                <p className="text-sm font-medium text-red-400 font-navbar">Clear All Settings</p>
+                <p className="text-xs text-white/60 font-navbar">
                   Reset all settings to default (cannot be undone)
                 </p>
               </div>
@@ -430,10 +430,10 @@ export function Settings() {
         </SettingsSection>
 
         {/* Security Notice */}
-        <div className="p-4 rounded-xl border border-amber-500/20 bg-amber-500/5">
+        <div className="p-4 rounded-xl border border-green-400/20 bg-green-500/5">
           <div className="flex items-start gap-3">
-            <AlertTriangle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
-            <p className="text-xs text-foreground/70 leading-relaxed">
+            <i className="fa-solid fa-triangle-exclamation text-green-400 flex-shrink-0 mt-0.5"></i>
+            <p className="text-xs text-white/70 leading-relaxed font-navbar">
               Keep your private keys safe and never share your seed phrase. Your wallet security is your responsibility.
             </p>
           </div>

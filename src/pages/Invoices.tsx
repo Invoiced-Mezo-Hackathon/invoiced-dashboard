@@ -78,10 +78,10 @@ export function Invoices({ invoices }: InvoicesProps) {
 
   return (
     <div className="flex-1 h-screen overflow-y-auto p-4 sm:p-6 lg:p-8">
-      <div className="mb-6 lg:mb-8">
+      <div className="mb-6">
         <div>
-          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold mb-2 font-title">Invoices</h1>
-          <p className="text-sm sm:text-base text-white/50">
+          <h1 className="text-2xl sm:text-3xl font-bold mb-2 font-navbar text-white">Invoices</h1>
+          <p className="text-sm font-navbar text-white/60">
             {filteredInvoices.length} invoice{filteredInvoices.length !== 1 ? 's' : ''} 
             {statusFilter !== 'all' && ` (${statusFilter})`}
           </p>
@@ -90,16 +90,16 @@ export function Invoices({ invoices }: InvoicesProps) {
 
       {/* Status Filter */}
       <div className="mb-6">
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {(['all', 'pending', 'paid', 'cancelled'] as const).map((status) => (
             <button
               key={status}
               onClick={() => setStatusFilter(status)}
               className={cn(
-                "px-4 py-2 rounded-lg text-sm font-medium transition-colors capitalize",
+                "px-4 py-2 rounded-full text-sm font-navbar font-medium transition-all capitalize border",
                 statusFilter === status
-                  ? "bg-orange-400 text-white"
-                  : "bg-white/10 text-white/60 hover:bg-white/20"
+                  ? "bg-green-500/10 text-green-400 border-green-400/30"
+                  : "bg-[#2C2C2E]/60 text-white/60 border-transparent hover:bg-green-500/5 hover:border-green-400/10"
               )}
             >
               {status}
@@ -108,114 +108,112 @@ export function Invoices({ invoices }: InvoicesProps) {
         </div>
       </div>
 
-      {/* Create Invoice Button - Middle Section */}
-      <div className="mb-8 flex justify-center">
+      {/* Create Invoice Button */}
+      <div className="mb-6 flex justify-center">
         <CreateInvoicePanel />
       </div>
 
       {/* Invoices Grid */}
-      <div className="grid gap-6">
+      <div className="space-y-4">
         {filteredInvoices.map((invoice) => (
           <div
             key={invoice.id}
-            className="glass-card p-6 rounded-3xl hover:scale-[1.02] transition-all group"
+            className="bg-[#2C2C2E]/40 backdrop-blur-xl border border-green-400/10 rounded-2xl p-5 hover:border-green-400/20 transition-all group"
           >
             <div className="flex items-start justify-between mb-4">
               <div className="flex-1">
-                <h3 className="text-xl font-semibold mb-2 group-hover:text-white/90 transition-colors font-title">
+                <h3 className="text-lg font-semibold mb-2 group-hover:text-white transition-colors font-navbar text-white">
                   {invoice.clientName}
                 </h3>
-                <p className="text-sm text-white/50 mb-2">{invoice.clientCode}</p>
-                <p className="text-sm text-white/60 line-clamp-2">{invoice.details}</p>
+                <p className="text-xs font-navbar text-white/50 mb-2">{invoice.clientCode}</p>
+                <p className="text-sm font-navbar text-white/60">{invoice.details}</p>
               </div>
-                        <div className="flex items-center gap-2 ml-4">
-                          <button
-                            onClick={(e) => handleShowQR(invoice, e)}
-                            className="p-2 rounded-xl bg-white/10 hover:bg-white/20 transition-colors group"
-                            title="Share QR Code"
-                          >
-                            <QrCode className="w-4 h-4" />
-                          </button>
-                          {invoice.status === 'paid' && (
-                            <button
-                              onClick={(e) => handleShowTransaction(invoice, e)}
-                              className="p-2 rounded-xl bg-blue-500/10 hover:bg-blue-500/20 transition-colors group"
-                              title="View Transaction Details"
-                            >
-                              <Eye className="w-4 h-4 text-blue-400" />
-                            </button>
-                          )}
-                          {invoice.status === 'pending' && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setShowCancelConfirm(invoice);
-                              }}
-                              className="p-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 transition-colors group"
-                              title="Cancel Invoice"
-                            >
-                              <XCircle className="w-4 h-4 text-red-400" />
-                            </button>
-                          )}
-                          <span
-                            className={cn(
-                              "px-3 py-1 rounded-full text-xs font-medium transition-colors",
-                              invoice.status === 'paid' && "bg-green-500/20 text-green-400",
-                              invoice.status === 'pending' && "bg-yellow-500/20 text-yellow-400",
-                              invoice.status === 'cancelled' && "bg-red-500/20 text-red-400"
-                            )}
-                          >
-                            {invoice.status}
-                          </span>
-                        </div>
+              <div className="flex items-center gap-2 ml-4">
+                <button
+                  onClick={(e) => handleShowQR(invoice, e)}
+                  className="w-8 h-8 rounded-lg border border-green-400/30 bg-green-500/10 hover:bg-green-500/20 transition-all flex items-center justify-center group"
+                  title="Share QR Code"
+                >
+                  <QrCode className="w-4 h-4 text-white" />
+                </button>
+                {invoice.status === 'paid' && (
+                  <button
+                    onClick={(e) => handleShowTransaction(invoice, e)}
+                    className="w-8 h-8 rounded-lg border border-green-400/30 bg-green-500/10 hover:bg-green-500/20 transition-all flex items-center justify-center"
+                    title="View Transaction Details"
+                  >
+                    <Eye className="w-4 h-4 text-white" />
+                  </button>
+                )}
+                {invoice.status === 'pending' && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowCancelConfirm(invoice);
+                    }}
+                    className="w-8 h-8 rounded-lg border border-red-400/30 bg-red-500/10 hover:bg-red-500/20 transition-all flex items-center justify-center"
+                    title="Cancel Invoice"
+                  >
+                    <XCircle className="w-4 h-4 text-white" />
+                  </button>
+                )}
+                <span
+                  className={cn(
+                    "px-3 py-1 rounded-full text-xs font-navbar font-medium border",
+                    invoice.status === 'paid' && "bg-green-500/10 text-green-400 border-green-400/20",
+                    invoice.status === 'pending' && "bg-yellow-500/10 text-yellow-400 border-yellow-400/20",
+                    invoice.status === 'cancelled' && "bg-red-500/10 text-red-400 border-red-400/20"
+                  )}
+                >
+                  {invoice.status}
+                </span>
+              </div>
             </div>
             
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <p className="text-3xl font-bold mb-1">
-                    {invoice.amount.toFixed(8)} BTC
-                  </p>
-                  <p className="text-sm text-white/50">${invoice.musdAmount.toFixed(2)} USD</p>
-                </div>
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <p className="text-2xl font-bold font-navbar mb-1 text-white">
+                  {invoice.amount.toFixed(8)} BTC
+                </p>
+                <p className="text-sm font-navbar text-white/60">${invoice.musdAmount.toFixed(2)} USD</p>
+              </div>
               <div className="text-right">
-                <p className="text-xs text-white/50 mb-1">Created</p>
-                <p className="text-sm text-white/70">{new Date(invoice.createdAt).toLocaleDateString()}</p>
+                <p className="text-xs font-navbar text-white/50 mb-1">Created</p>
+                <p className="text-sm font-navbar text-white/70">{new Date(invoice.createdAt).toLocaleDateString()}</p>
               </div>
             </div>
 
-              <div className="flex items-center justify-between pt-4 border-t border-white/10">
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-orange-400"></div>
-                  <span className="text-xs text-white/60">
-                    Mezo: {invoice.bitcoinAddress ? `${invoice.bitcoinAddress.slice(0, 8)}...${invoice.bitcoinAddress.slice(-8)}` : 'Not set'}
-                  </span>
-                </div>
+            <div className="flex items-center justify-between pt-4 border-t border-green-400/10">
               <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setSelectedInvoice(invoice)}
-                  className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 transition-colors text-sm font-medium"
-                >
-                  View Details
-                </button>
+                <div className="w-2 h-2 rounded-full bg-green-400"></div>
+                <span className="text-xs font-navbar text-white/60">
+                  Mezo: {invoice.bitcoinAddress ? `${invoice.bitcoinAddress.slice(0, 8)}...${invoice.bitcoinAddress.slice(-8)}` : 'Not set'}
+                </span>
               </div>
+              <button
+                onClick={() => setSelectedInvoice(invoice)}
+                className="px-4 py-2 rounded-full bg-green-500/10 border border-green-400/30 hover:bg-green-500/20 hover:border-green-400/50 transition-all text-sm font-navbar font-medium text-white"
+              >
+                View Details
+              </button>
             </div>
           </div>
         ))}
 
         {filteredInvoices.length === 0 && (
-          <div className="glass-card p-16 rounded-3xl text-center">
-            <div className="w-20 h-20 rounded-full bg-gradient-to-r from-blue-500/20 to-purple-500/20 flex items-center justify-center mx-auto mb-6">
-              <p className="text-4xl">📝</p>
+          <div className="bg-[#2C2C2E]/40 backdrop-blur-xl border border-green-400/10 rounded-2xl p-12 text-center">
+            <div className="w-16 h-16 rounded-full bg-green-500/10 border border-green-400/30 flex items-center justify-center mx-auto mb-4">
+              <QrCode className="w-8 h-8 text-green-400" />
             </div>
-            <h3 className="text-xl font-semibold mb-2 font-title">No invoices yet</h3>
-            <p className="text-foreground/60 text-sm mb-6">
+            <h3 className="text-lg font-semibold mb-2 font-navbar text-white">No invoices yet</h3>
+            <p className="text-white/60 text-sm mb-2 font-navbar">
               {statusFilter === 'all' 
                 ? 'Create your first invoice to get started'
                 : `No ${statusFilter} invoices found`
               }
             </p>
             {statusFilter === 'all' && (
-              <p className="text-xs text-white/40">Click "Create Invoice" above to get started</p>
+              <p className="text-xs font-navbar text-white/40">Click "Create Invoice" above to get started</p>
             )}
           </div>
         )}
@@ -224,9 +222,9 @@ export function Invoices({ invoices }: InvoicesProps) {
       {/* Invoice Details Modal */}
       {selectedInvoice && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="glass-card p-6 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+          <div className="bg-[#2C2C2E]/90 backdrop-blur-xl border border-green-400/20 p-6 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-semibold font-title">Invoice Details</h3>
+              <h3 className="text-xl font-semibold font-navbar text-white">Invoice Details</h3>
               <button
                 onClick={() => setSelectedInvoice(null)}
                 className="text-white/60 hover:text-white transition-colors"
@@ -321,11 +319,11 @@ export function Invoices({ invoices }: InvoicesProps) {
           onClick={() => setShowCancelConfirm(null)}
         >
           <div
-            className="w-full max-w-md bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl p-6 shadow-2xl"
+            className="w-full max-w-md bg-[#2C2C2E]/90 backdrop-blur-xl border border-green-400/20 rounded-2xl p-6 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-semibold text-white">Cancel Invoice</h3>
+              <h3 className="text-lg font-semibold font-navbar text-white">Cancel Invoice</h3>
               <button
                 onClick={() => setShowCancelConfirm(null)}
                 className="text-white/60 hover:text-white transition-colors"

@@ -203,61 +203,61 @@ export function CreateInvoicePanel({ onInvoiceCreated }: CreateInvoicePanelProps
       {/* Modal Overlay */}
       {isDropdownOpen && (
         <div 
-          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4"
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4"
           onClick={() => setIsDropdownOpen(false)}
         >
           <div 
-            className="w-full max-w-lg max-h-[90vh] overflow-y-auto bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl p-6 shadow-2xl"
+            className="w-full max-w-lg max-h-[90vh] overflow-y-auto bg-[#2C2C2E]/90 backdrop-blur-xl border border-green-400/20 rounded-2xl p-6 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-semibold text-white">Create New Invoice</h3>
+              <h3 className="text-lg font-semibold text-white font-navbar">Create New Invoice</h3>
               <button
                 onClick={() => setIsDropdownOpen(false)}
-                className="text-white/60 hover:text-white transition-colors"
+                className="w-8 h-8 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-white/60 hover:text-white hover:bg-white/20 transition-all"
               >
-                <X className="w-5 h-5" />
+                <i className="fa-solid fa-xmark text-sm"></i>
               </button>
             </div>
 
             <div className="space-y-4">
               {/* Client Name */}
               <div>
-                <label className="block text-sm font-medium text-white/80 mb-2">
+                <label className="block text-sm font-medium text-white/80 mb-2 font-navbar">
                   Client Name *
                 </label>
                 <input
                   type="text"
                   value={clientName}
                   onChange={(e) => setClientName(e.target.value)}
-                  className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent"
+                  className="w-full px-4 py-3 bg-[#2C2C2E]/40 backdrop-blur-xl border border-green-400/20 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent font-navbar"
                   placeholder="Enter client name"
                 />
               </div>
 
               {/* Client Code (Auto-generated) */}
               <div>
-                <label className="block text-sm font-medium text-white/80 mb-2">
+                <label className="block text-sm font-medium text-white/80 mb-2 font-navbar">
                   Client Code
                 </label>
                 <input
                   type="text"
                   value={clientCode}
                   readOnly
-                  className="w-full px-4 py-3 bg-white/5 border border-white/20 rounded-xl text-white/70 cursor-not-allowed"
+                  className="w-full px-4 py-3 bg-[#2C2C2E]/20 border border-green-400/10 rounded-xl text-white/70 cursor-not-allowed font-navbar"
                   placeholder="Auto-generated"
                 />
               </div>
 
               {/* Details */}
               <div>
-                <label className="block text-sm font-medium text-white/80 mb-2">
+                <label className="block text-sm font-medium text-white/80 mb-2 font-navbar">
                   Invoice Details *
                 </label>
                 <textarea
                   value={details}
                   onChange={(e) => setDetails(e.target.value)}
-                  className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent resize-none"
+                  className="w-full px-4 py-3 bg-[#2C2C2E]/40 backdrop-blur-xl border border-green-400/20 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent resize-none font-navbar"
                   rows={3}
                   placeholder="Describe the services or products"
                 />
@@ -266,17 +266,17 @@ export function CreateInvoicePanel({ onInvoiceCreated }: CreateInvoicePanelProps
               {/* Amount Input with Currency Toggle */}
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <label className="block text-sm font-medium text-white/80">
+                  <label className="block text-sm font-medium text-white/80 font-navbar">
                     Amount *
                   </label>
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
                       onClick={() => setInputCurrency('USD')}
-                      className={`px-3 py-1 text-xs rounded-lg transition-all ${
+                      className={`px-3 py-1 text-xs rounded-lg transition-all font-navbar ${
                         inputCurrency === 'USD'
-                          ? 'bg-orange-500 text-white'
-                          : 'bg-white/10 text-white/60 hover:bg-white/20'
+                          ? 'bg-green-500 text-white border border-green-400/30'
+                          : 'bg-[#2C2C2E]/40 text-white/60 hover:bg-green-500/20 border border-green-400/10'
                       }`}
                     >
                       USD
@@ -284,10 +284,10 @@ export function CreateInvoicePanel({ onInvoiceCreated }: CreateInvoicePanelProps
                     <button
                       type="button"
                       onClick={() => setInputCurrency('BTC')}
-                      className={`px-3 py-1 text-xs rounded-lg transition-all ${
+                      className={`px-3 py-1 text-xs rounded-lg transition-all font-navbar ${
                         inputCurrency === 'BTC'
-                          ? 'bg-orange-500 text-white'
-                          : 'bg-white/10 text-white/60 hover:bg-white/20'
+                          ? 'bg-green-500 text-white border border-green-400/30'
+                          : 'bg-[#2C2C2E]/40 text-white/60 hover:bg-green-500/20 border border-green-400/10'
                       }`}
                     >
                       BTC
@@ -300,7 +300,7 @@ export function CreateInvoicePanel({ onInvoiceCreated }: CreateInvoicePanelProps
                     type="number"
                     value={usdAmount}
                     onChange={(e) => setUsdAmount(e.target.value)}
-                    className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent"
+                    className="w-full px-4 py-3 bg-[#2C2C2E]/40 backdrop-blur-xl border border-green-400/20 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent font-navbar"
                     placeholder="100.00"
                     step="0.01"
                     min="0"
@@ -310,7 +310,7 @@ export function CreateInvoicePanel({ onInvoiceCreated }: CreateInvoicePanelProps
                     type="number"
                     value={btcInput}
                     onChange={(e) => setBtcInput(e.target.value)}
-                    className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent"
+                    className="w-full px-4 py-3 bg-[#2C2C2E]/40 backdrop-blur-xl border border-green-400/20 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent font-navbar"
                     placeholder="0.001"
                     step="0.00000001"
                     min="0"
@@ -318,22 +318,22 @@ export function CreateInvoicePanel({ onInvoiceCreated }: CreateInvoicePanelProps
                 )}
                 
                 {((inputCurrency === 'USD' && usdAmount) || (inputCurrency === 'BTC' && btcInput)) && (
-                  <div className="mt-2 p-3 bg-white/5 rounded-xl">
-                    <p className="text-sm text-white/80">
+                  <div className="mt-2 p-3 bg-[#2C2C2E]/20 border border-green-400/10 rounded-xl">
+                    <p className="text-sm text-white/80 font-navbar">
                       {inputCurrency === 'USD' ? (
                         <>
-                          Bitcoin Amount: <span className="font-semibold text-orange-400">{isNaN(bitcoinAmount) ? '0.00000000' : bitcoinAmount.toFixed(8)} BTC</span>
+                          Bitcoin Amount: <span className="font-semibold text-green-400">{isNaN(bitcoinAmount) ? '0.00000000' : bitcoinAmount.toFixed(8)} BTC</span>
                         </>
                       ) : (
                         <>
-                          USD Equivalent: <span className="font-semibold text-orange-400">${isNaN(displayUsdAmount) ? '0.00' : displayUsdAmount.toFixed(2)}</span>
+                          USD Equivalent: <span className="font-semibold text-green-400">${isNaN(displayUsdAmount) ? '0.00' : displayUsdAmount.toFixed(2)}</span>
                         </>
                       )}
                     </p>
-                    <p className="text-xs text-white/60 mt-1">
+                    <p className="text-xs text-white/60 mt-1 font-navbar">
                       {isLoadingPrice ? (
                         <span className="flex items-center gap-1">
-                          <div className="w-3 h-3 border border-orange-400 border-t-transparent rounded-full animate-spin"></div>
+                          <div className="w-3 h-3 border border-green-400 border-t-transparent rounded-full animate-spin"></div>
                           Loading Bitcoin price...
                         </span>
                       ) : (
@@ -346,17 +346,17 @@ export function CreateInvoicePanel({ onInvoiceCreated }: CreateInvoicePanelProps
 
               {/* Mezo Testnet Address */}
               <div>
-                <label className="block text-sm font-medium text-white/80 mb-2">
+                <label className="block text-sm font-medium text-white/80 mb-2 font-navbar">
                   Mezo Testnet Address *
                 </label>
                 <input
                   type="text"
                   value={bitcoinAddress}
                   onChange={(e) => setBitcoinAddress(e.target.value)}
-                  className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent"
+                  className="w-full px-4 py-3 bg-[#2C2C2E]/40 backdrop-blur-xl border border-green-400/20 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent font-navbar"
                   placeholder="0x1234567890123456789012345678901234567890"
                 />
-                <p className="text-xs text-white/60 mt-1">
+                <p className="text-xs text-white/60 mt-1 font-navbar">
                   Enter your Mezo testnet address to receive Bitcoin payments
                 </p>
               </div>
@@ -366,7 +366,7 @@ export function CreateInvoicePanel({ onInvoiceCreated }: CreateInvoicePanelProps
               <button
                 onClick={handleSendInvoice}
                 disabled={isCreating}
-                className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 disabled:from-gray-500 disabled:to-gray-600 text-white font-medium rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl disabled:cursor-not-allowed"
+                className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-green-500 hover:bg-green-600 disabled:bg-gray-500 text-white font-medium rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl disabled:cursor-not-allowed font-navbar"
               >
                 {isCreating ? (
                   <>
@@ -375,7 +375,7 @@ export function CreateInvoicePanel({ onInvoiceCreated }: CreateInvoicePanelProps
                   </>
                 ) : (
                   <>
-                    <Send className="w-5 h-5" />
+                    <i className="fa-solid fa-paper-plane"></i>
                     <span>Create Invoice</span>
                   </>
                 )}
