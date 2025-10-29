@@ -297,7 +297,18 @@ export function Vault() {
           </div>
         </div>
 
-        {/* Action Buttons (removed from here; moved to top) */}
+        {/* mats Rewards Banner */}
+        <div className="bg-[#2C2C2E]/40 backdrop-blur-xl p-4 rounded-2xl border border-purple-500/20 bg-purple-500/10">
+          <div className="flex items-center gap-3">
+            <span className="text-3xl">🎁</span>
+            <div>
+              <h3 className="font-bold text-purple-400 font-navbar">Earn mats Rewards</h3>
+              <p className="text-sm text-white/70 font-navbar">
+                Coming Soon: Earn loyalty points on every deposit and borrow!
+              </p>
+            </div>
+          </div>
+        </div>
 
         {/* Value Display */}
         <div className="bg-[#2C2C2E]/40 backdrop-blur-xl p-6 rounded-2xl border border-green-400/10">
