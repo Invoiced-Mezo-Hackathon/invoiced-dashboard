@@ -1,11 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAccount } from 'wagmi';
-import { Send, Plus, X, Clock } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
+import { Send, Plus, X } from 'lucide-react';
+import toast from 'react-hot-toast';
 import { InvoiceQRModal } from './InvoiceQRModal';
 import { useInvoiceContract } from '@/hooks/useInvoiceContract';
-import { invoiceStorage } from '@/services/invoice-storage';
-import { boarRPC } from '@/services/boar-rpc';
+import { parseEther } from 'viem';
 
 interface CreateInvoicePanelProps {
   onInvoiceCreated?: () => void;
@@ -14,15 +13,7 @@ interface CreateInvoicePanelProps {
 
 export function CreateInvoicePanel({ onInvoiceCreated }: CreateInvoicePanelProps = {}) {
   const { address, isConnected } = useAccount();
-  const { createInvoice, isCreating, createTx } = useInvoiceContract();
-  const { toast } = useToast();
-  
-  // Track when we started creating to avoid infinite loops
-  const [hasStartedCreation, setHasStartedCreation] = useState(false);
-  // Track if transaction actually started on blockchain
-  const [txStarted, setTxStarted] = useState(false);
-  // Track creation start time for timer
-  const [creationStartTime, setCreationStartTime] = useState<number | null>(null);
+  const { createInvoice: createBlockchainInvoice, isCreating } = useInvoiceContract();
   
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [clientName, setClientName] = useState('');
@@ -30,8 +21,7 @@ export function CreateInvoicePanel({ onInvoiceCreated }: CreateInvoicePanelProps
   const [clientCode, setClientCode] = useState('');
   const [usdAmount, setUsdAmount] = useState('');
   const [btcInput, setBtcInput] = useState('');
-  const [bitcoinAddress, setBitcoinAddress] = useState(address || '');
-  const [payToAddress, setPayToAddress] = useState(address || ''); // Separate field for payment address
+  const [bitcoinAddress, setBitcoinAddress] = useState('');
   const [showQRModal, setShowQRModal] = useState(false);
   const [createdInvoice, setCreatedInvoice] = useState<any>(null);
   const [bitcoinPrice, setBitcoinPrice] = useState<number>(0);
@@ -92,14 +82,6 @@ export function CreateInvoicePanel({ onInvoiceCreated }: CreateInvoicePanelProps
     }
   }, [clientName]);
 
-  // Auto-detect connected wallet address for payment
-  useEffect(() => {
-    if (address && !bitcoinAddress) {
-      setBitcoinAddress(address);
-      setPayToAddress(address);
-    }
-  }, [address, bitcoinAddress]);
-
   // Calculate Bitcoin equivalent from USD input using real-time Bitcoin price
   const getBitcoinAmount = () => {
     if (!usdAmount || !bitcoinPrice) return 0;
@@ -138,47 +120,27 @@ export function CreateInvoicePanel({ onInvoiceCreated }: CreateInvoicePanelProps
 
   const handleSendInvoice = async () => {
     if (!isConnected) {
-      toast({
-        title: "Wallet Not Connected",
-        description: "Please connect your wallet",
-        variant: "destructive",
-      });
+      toast.error('Please connect your wallet');
       return;
     }
 
     if (!clientName.trim() || !details.trim()) {
-      toast({
-        title: "Missing Information",
-        description: "Please fill in all required fields",
-        variant: "destructive",
-      });
+      toast.error('Please fill in all required fields');
       return;
     }
 
     if ((inputCurrency === 'USD' && !usdAmount.trim()) || (inputCurrency === 'BTC' && !btcInput.trim())) {
-      toast({
-        title: "Missing Amount",
-        description: "Please enter an amount",
-        variant: "destructive",
-      });
+      toast.error('Please enter an amount');
       return;
     }
 
-    if (!payToAddress.trim()) {
-      toast({
-        title: "Missing Payment Address",
-        description: "Please enter a payment address",
-        variant: "destructive",
-      });
+    if (!bitcoinAddress.trim()) {
+      toast.error('Please enter a Mezo testnet address');
       return;
     }
 
-    if (!isValidMezoAddress(payToAddress)) {
-      toast({
-        title: "Invalid Address",
-        description: "Please enter a valid Mezo testnet address (0x...)",
-        variant: "destructive",
-      });
+    if (!isValidMezoAddress(bitcoinAddress)) {
+      toast.error('Please enter a valid Mezo testnet address (0x...)');
       return;
     }
 
@@ -188,139 +150,44 @@ export function CreateInvoicePanel({ onInvoiceCreated }: CreateInvoicePanelProps
       : parseFloat(btcInput);
     
     if (isNaN(finalBitcoinAmount) || finalBitcoinAmount <= 0) {
-      toast({
-        title: "Invalid Amount",
-        description: "Please enter a valid amount",
-        variant: "destructive",
-      });
+      toast.error('Please enter a valid amount');
       return;
     }
     
     try {
-      // Begin creation
-      setHasStartedCreation(true);
-
-      console.log('🚀 Starting invoice creation with data:', {
+      // Convert BTC to wei for smart contract
+      const amountInWei = parseEther(finalBitcoinAmount.toString());
+      
+      // Generate client code
+      const clientCode = `CLT-${clientName.substring(0, 3).toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`;
+      
+      // Call smart contract
+      await createBlockchainInvoice({
         clientName,
         details,
         amount: finalBitcoinAmount.toString(),
         currency: 'USD',
         bitcoinAddress,
-        payToAddress,
       });
 
-      // Get balance snapshot for the payment address (optional)
-      let balanceAtCreation = '0';
-      try {
-        console.log('🔍 Fetching balance for address:', payToAddress);
-        if (!payToAddress || payToAddress.length < 10) {
-          throw new Error('Invalid payment address');
-        }
-        const balance = await boarRPC.getAddressBalance(payToAddress);
-        balanceAtCreation = balance.balance;
-        console.log('💰 Balance snapshot at creation:', balanceAtCreation);
-      } catch (error) {
-        console.warn('⚠️ Could not get balance snapshot:', error);
-        // Continue without balance snapshot - not critical for invoice creation
-        balanceAtCreation = '0';
-      }
-
-      // Use the hook's createInvoice function to avoid duplicates
-      const invoiceData = {
-        clientName,
-        details,
-        amount: finalBitcoinAmount.toString(),
-        currency: 'USD',
-        bitcoinAddress: payToAddress, // Use payToAddress as the payment address
-        balanceAtCreation, // Include balance snapshot for payment verification
-      };
-
-      console.log('📝 Creating invoice via hook:', invoiceData);
-      
-      // This will handle both localStorage and blockchain submission
-      await createInvoice(invoiceData);
-
-      // Close modal and reset form
-      setIsDropdownOpen(false);
+      // Reset form
       setClientName('');
       setDetails('');
       setUsdAmount('');
       setBtcInput('');
       setClientCode('');
+      setBitcoinAddress('');
       setInputCurrency('USD');
-      setHasStartedCreation(false);
-      setTxStarted(false);
-      setCreationStartTime(null);
+      setIsDropdownOpen(false);
       
-      // Notify parent to refresh data
-      console.log('📞 Calling onInvoiceCreated callback');
+      // Notify parent
       onInvoiceCreated?.();
       
     } catch (error) {
-      console.error('❌ Error creating invoice:', error);
-      toast({
-        title: "Creation Failed",
-        description: `Failed to create invoice: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        variant: "destructive",
-      });
-      setHasStartedCreation(false);
+      console.error('Error creating invoice:', error);
+      toast.error('Failed to create invoice. Please try again.');
     }
   };
-
-  // Track when transaction actually starts (when isCreating becomes true)
-  useEffect(() => {
-    if (isCreating && hasStartedCreation && !creationStartTime) {
-      setTxStarted(true);
-      setCreationStartTime(Date.now());
-    }
-  }, [isCreating, hasStartedCreation, creationStartTime]);
-
-  // Calculate time remaining for display
-  const getCountdownText = () => {
-    if (!creationStartTime) return '';
-    const elapsed = Date.now() - creationStartTime;
-    const remaining = Math.max(0, 180000 - elapsed); // 3 minutes timeout
-    const minutes = Math.floor(remaining / 60000);
-    const seconds = Math.floor((remaining % 60000) / 1000);
-    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
-  };
-  
-  // Handle successful transaction completion
-  useEffect(() => {
-    // Check if transaction completed successfully
-    const isSuccess = (txStarted && !isCreating && hasStartedCreation) || 
-                      (createTx.status === 'success' && hasStartedCreation && txStarted);
-    
-    if (isSuccess) {
-      console.log('✅ Invoice created successfully!');
-      toast.success('Invoice created successfully!');
-      
-      // Close modal and reset everything
-      setIsDropdownOpen(false);
-      setClientName('');
-      setDetails('');
-      setUsdAmount('');
-      setBtcInput('');
-      setClientCode('');
-      setInputCurrency('USD');
-      setHasStartedCreation(false);
-      setTxStarted(false);
-      setCreationStartTime(null);
-      
-      // Notify parent to refresh data
-      onInvoiceCreated?.();
-    }
-  }, [isCreating, createTx.status, hasStartedCreation, txStarted, onInvoiceCreated]);
-  
-  // Handle errors
-  useEffect(() => {
-    if (hasStartedCreation && !isCreating && createTx.status === 'error') {
-      // Transaction failed - keep modal open but reset the flag so they can retry
-      setHasStartedCreation(false);
-      setTxStarted(false);
-      toast.error('Transaction failed. Please try again.');
-    }
-  }, [createTx.status, hasStartedCreation, isCreating]);
 
   return (
     <div className="relative" ref={dropdownRef}>
@@ -330,78 +197,67 @@ export function CreateInvoicePanel({ onInvoiceCreated }: CreateInvoicePanelProps
         className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-medium transition-all duration-200 shadow-lg hover:shadow-xl text-sm"
       >
         <Plus className="w-4 h-4" />
-        <span>Generate Invoice</span>
+        <span>Create Invoice</span>
       </button>
 
       {/* Modal Overlay */}
       {isDropdownOpen && (
         <div 
-          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4"
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4"
           onClick={() => setIsDropdownOpen(false)}
         >
           <div 
-            className="w-full max-w-lg max-h-[90vh] overflow-y-auto bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl p-6 shadow-2xl"
+            className="w-full max-w-lg max-h-[90vh] overflow-y-auto bg-[#2C2C2E]/90 backdrop-blur-xl border border-green-400/20 rounded-2xl p-6 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-semibold text-white">Generate Invoice</h3>
+              <h3 className="text-lg font-semibold text-white font-navbar">Create New Invoice</h3>
               <button
-                onClick={() => {
-                  setIsDropdownOpen(false);
-                  setHasStartedCreation(false);
-                  setTxStarted(false);
-                  setClientName('');
-                  setDetails('');
-                  setUsdAmount('');
-                  setBtcInput('');
-                  setClientCode('');
-                  // Don't reset bitcoinAddress - keep it as connected wallet
-                  setInputCurrency('USD');
-                }}
-                className="text-white/60 hover:text-white transition-colors"
+                onClick={() => setIsDropdownOpen(false)}
+                className="w-8 h-8 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-white/60 hover:text-white hover:bg-white/20 transition-all"
               >
-                <X className="w-5 h-5" />
+                <i className="fa-solid fa-xmark text-sm"></i>
               </button>
             </div>
 
             <div className="space-y-4">
               {/* Client Name */}
               <div>
-                <label className="block text-sm font-medium text-white/80 mb-2">
+                <label className="block text-sm font-medium text-white/80 mb-2 font-navbar">
                   Client Name *
                 </label>
                 <input
                   type="text"
                   value={clientName}
                   onChange={(e) => setClientName(e.target.value)}
-                  className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent"
+                  className="w-full px-4 py-3 bg-[#2C2C2E]/40 backdrop-blur-xl border border-green-400/20 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent font-navbar"
                   placeholder="Enter client name"
                 />
               </div>
 
               {/* Client Code (Auto-generated) */}
               <div>
-                <label className="block text-sm font-medium text-white/80 mb-2">
+                <label className="block text-sm font-medium text-white/80 mb-2 font-navbar">
                   Client Code
                 </label>
                 <input
                   type="text"
                   value={clientCode}
                   readOnly
-                  className="w-full px-4 py-3 bg-white/5 border border-white/20 rounded-xl text-white/70 cursor-not-allowed"
+                  className="w-full px-4 py-3 bg-[#2C2C2E]/20 border border-green-400/10 rounded-xl text-white/70 cursor-not-allowed font-navbar"
                   placeholder="Auto-generated"
                 />
               </div>
 
               {/* Details */}
               <div>
-                <label className="block text-sm font-medium text-white/80 mb-2">
+                <label className="block text-sm font-medium text-white/80 mb-2 font-navbar">
                   Invoice Details *
                 </label>
                 <textarea
                   value={details}
                   onChange={(e) => setDetails(e.target.value)}
-                  className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent resize-none"
+                  className="w-full px-4 py-3 bg-[#2C2C2E]/40 backdrop-blur-xl border border-green-400/20 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent resize-none font-navbar"
                   rows={3}
                   placeholder="Describe the services or products"
                 />
@@ -410,17 +266,17 @@ export function CreateInvoicePanel({ onInvoiceCreated }: CreateInvoicePanelProps
               {/* Amount Input with Currency Toggle */}
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <label className="block text-sm font-medium text-white/80">
+                  <label className="block text-sm font-medium text-white/80 font-navbar">
                     Amount *
                   </label>
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
                       onClick={() => setInputCurrency('USD')}
-                      className={`px-3 py-1 text-xs rounded-lg transition-all ${
+                      className={`px-3 py-1 text-xs rounded-lg transition-all font-navbar ${
                         inputCurrency === 'USD'
-                          ? 'bg-orange-500 text-white'
-                          : 'bg-white/10 text-white/60 hover:bg-white/20'
+                          ? 'bg-green-500 text-white border border-green-400/30'
+                          : 'bg-[#2C2C2E]/40 text-white/60 hover:bg-green-500/20 border border-green-400/10'
                       }`}
                     >
                       USD
@@ -428,10 +284,10 @@ export function CreateInvoicePanel({ onInvoiceCreated }: CreateInvoicePanelProps
                     <button
                       type="button"
                       onClick={() => setInputCurrency('BTC')}
-                      className={`px-3 py-1 text-xs rounded-lg transition-all ${
+                      className={`px-3 py-1 text-xs rounded-lg transition-all font-navbar ${
                         inputCurrency === 'BTC'
-                          ? 'bg-orange-500 text-white'
-                          : 'bg-white/10 text-white/60 hover:bg-white/20'
+                          ? 'bg-green-500 text-white border border-green-400/30'
+                          : 'bg-[#2C2C2E]/40 text-white/60 hover:bg-green-500/20 border border-green-400/10'
                       }`}
                     >
                       BTC
@@ -444,7 +300,7 @@ export function CreateInvoicePanel({ onInvoiceCreated }: CreateInvoicePanelProps
                     type="number"
                     value={usdAmount}
                     onChange={(e) => setUsdAmount(e.target.value)}
-                    className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent"
+                    className="w-full px-4 py-3 bg-[#2C2C2E]/40 backdrop-blur-xl border border-green-400/20 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent font-navbar"
                     placeholder="100.00"
                     step="0.01"
                     min="0"
@@ -454,7 +310,7 @@ export function CreateInvoicePanel({ onInvoiceCreated }: CreateInvoicePanelProps
                     type="number"
                     value={btcInput}
                     onChange={(e) => setBtcInput(e.target.value)}
-                    className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent"
+                    className="w-full px-4 py-3 bg-[#2C2C2E]/40 backdrop-blur-xl border border-green-400/20 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent font-navbar"
                     placeholder="0.001"
                     step="0.00000001"
                     min="0"
@@ -462,84 +318,65 @@ export function CreateInvoicePanel({ onInvoiceCreated }: CreateInvoicePanelProps
                 )}
                 
                 {((inputCurrency === 'USD' && usdAmount) || (inputCurrency === 'BTC' && btcInput)) && (
-                  <div className="mt-2 p-3 bg-white/5 rounded-xl">
-                    <p className="text-sm text-white/80">
+                  <div className="mt-2 p-3 bg-[#2C2C2E]/20 border border-green-400/10 rounded-xl">
+                    <p className="text-sm text-white/80 font-navbar">
                       {inputCurrency === 'USD' ? (
                         <>
-                          Bitcoin Amount: <span className="font-semibold text-orange-400">{isNaN(bitcoinAmount) ? '0.00000000' : bitcoinAmount.toFixed(8)} BTC</span>
+                          Bitcoin Amount: <span className="font-semibold text-green-400">{isNaN(bitcoinAmount) ? '0.00000000' : bitcoinAmount.toFixed(8)} BTC</span>
                         </>
                       ) : (
                         <>
-                          USD Equivalent: <span className="font-semibold text-orange-400">${isNaN(displayUsdAmount) ? '0.00' : displayUsdAmount.toFixed(2)}</span>
+                          USD Equivalent: <span className="font-semibold text-green-400">${isNaN(displayUsdAmount) ? '0.00' : displayUsdAmount.toFixed(2)}</span>
                         </>
                       )}
                     </p>
-                    <div className="text-xs text-white/60 mt-1">
+                    <p className="text-xs text-white/60 mt-1 font-navbar">
                       {isLoadingPrice ? (
                         <span className="flex items-center gap-1">
-                          <div className="w-3 h-3 border border-orange-400 border-t-transparent rounded-full animate-spin"></div>
+                          <div className="w-3 h-3 border border-green-400 border-t-transparent rounded-full animate-spin"></div>
                           Loading Bitcoin price...
                         </span>
                       ) : (
                         `Current Bitcoin price: $${bitcoinPrice.toLocaleString()}`
                       )}
-                    </div>
+                    </p>
                   </div>
                 )}
               </div>
 
-              {/* Payment Address (Auto-detected) */}
+              {/* Mezo Testnet Address */}
               <div>
-                <label className="block text-sm font-medium text-white/80 mb-2">
-                  Payment Address (Auto-detected) *
+                <label className="block text-sm font-medium text-white/80 mb-2 font-navbar">
+                  Mezo Testnet Address *
                 </label>
                 <input
                   type="text"
                   value={bitcoinAddress}
-                  readOnly
-                  className="w-full px-4 py-3 bg-white/5 border border-white/20 rounded-xl text-white/70 cursor-not-allowed"
-                  placeholder="Connect wallet to auto-detect address"
+                  onChange={(e) => setBitcoinAddress(e.target.value)}
+                  className="w-full px-4 py-3 bg-[#2C2C2E]/40 backdrop-blur-xl border border-green-400/20 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent font-navbar"
+                  placeholder="0x1234567890123456789012345678901234567890"
                 />
-                <p className="text-xs text-white/60 mt-1">
-                  Payments will be sent to your connected wallet address
+                <p className="text-xs text-white/60 mt-1 font-navbar">
+                  Enter your Mezo testnet address to receive Bitcoin payments
                 </p>
               </div>
 
-              {/* Pay To Address (Editable) */}
-              <div>
-                <label className="block text-sm font-medium text-white/80 mb-2">
-                  Pay To Address *
-                </label>
-                <input
-                  type="text"
-                  value={payToAddress}
-                  onChange={(e) => setPayToAddress(e.target.value)}
-                  className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent"
-                  placeholder="Enter payment address (0x...)"
-                />
-                <p className="text-xs text-white/60 mt-1">
-                  Address where payments should be sent (can be different from your wallet)
-                </p>
-              </div>
-
-
-              {/* Transaction Status (hidden to avoid blocking UX) */}
 
               {/* Send Button */}
               <button
                 onClick={handleSendInvoice}
-                disabled={isCreating || createTx.status === 'pending'}
-                className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 disabled:from-gray-500 disabled:to-gray-600 text-white font-medium rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl disabled:cursor-not-allowed"
+                disabled={isCreating}
+                className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-green-500 hover:bg-green-600 disabled:bg-gray-500 text-white font-medium rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl disabled:cursor-not-allowed font-navbar"
               >
                 {isCreating ? (
                   <>
                     <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    <span>Confirming Transaction...</span>
+                    <span>Creating Invoice...</span>
                   </>
                 ) : (
                   <>
-                    <Send className="w-5 h-5" />
-                    <span>Generate Invoice</span>
+                    <i className="fa-solid fa-paper-plane"></i>
+                    <span>Create Invoice</span>
                   </>
                 )}
               </button>

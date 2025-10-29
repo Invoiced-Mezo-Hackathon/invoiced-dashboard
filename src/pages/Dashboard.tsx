@@ -1,7 +1,18 @@
 import { TrendingUp, Clock, Vault, Activity, DollarSign, Users, FileText, CreditCard } from 'lucide-react';
-import { Invoice } from '@/types/invoice';
-import { cn } from '@/lib/utils';
-import { useState, useEffect } from 'react';
+
+interface Invoice {
+  id: string;
+  clientName: string;
+  clientCode: string;
+  details: string;
+  amount: number;
+  currency: string;
+  musdAmount: number;
+  status: 'pending' | 'paid' | 'cancelled';
+  createdAt: string;
+  wallet: string;
+  bitcoinAddress?: string;
+}
 
 interface InvoiceStats {
   totalRevenue: number;
@@ -18,124 +29,19 @@ interface DashboardProps {
 }
 
 export function Dashboard({ onNavigate, invoices, stats }: DashboardProps) {
-  const [currentTime, setCurrentTime] = useState(Date.now());
-
-  // Update current time every second for countdown timers
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setCurrentTime(Date.now());
-    }, 1000);
-    
-    return () => clearInterval(interval);
-  }, []);
-
   // Use stats from hook if available, otherwise calculate from invoices
   const totalRevenue = stats?.totalRevenue ?? invoices
     .filter(invoice => invoice.status === 'paid')
-    .reduce((sum, invoice) => {
-      // Use observedInboundAmount if available (convert from wei), otherwise use amount
-      const paidAmount = invoice.observedInboundAmount 
-        ? parseFloat(invoice.observedInboundAmount) / 1e18 
-        : invoice.amount;
-      return sum + paidAmount;
-    }, 0);
+    .reduce((sum, invoice) => sum + invoice.amount, 0);
   
-  // Active invoices: pending and not expired
-  const activeInvoices = stats?.activeInvoices ?? invoices.filter(invoice => 
-    invoice.status === 'pending' && 
-    (!invoice.expiresAt || new Date(invoice.expiresAt) > new Date())
-  ).length;
-  
+  const activeInvoices = stats?.activeInvoices ?? invoices.filter(invoice => invoice.status === 'pending').length;
   const totalInvoices = stats?.totalInvoices ?? invoices.length;
-  
-  // Pending amount: only from non-expired pending invoices
   const pendingAmount = stats?.pendingAmount ?? invoices
-    .filter(invoice => 
-      invoice.status === 'pending' && 
-      (!invoice.expiresAt || new Date(invoice.expiresAt) > new Date())
-    )
+    .filter(invoice => invoice.status === 'pending')
     .reduce((sum, invoice) => sum + invoice.amount, 0);
 
-  // Get recent invoices (last 5) - show all statuses
+  // Get recent invoices (last 5)
   const recentInvoices = invoices.slice(0, 5);
-
-  // Helper function to get status color and label
-  const getStatusInfo = (invoice: Invoice) => {
-    const expiresAt = invoice.expiresAt ? new Date(invoice.expiresAt).getTime() : 0;
-    const isExpired = invoice.status === 'pending' && expiresAt > 0 && expiresAt <= currentTime;
-    
-    if (isExpired) {
-      return {
-        label: 'expired',
-        bgColor: 'bg-gray-500/20',
-        textColor: 'text-gray-400',
-        iconColor: 'text-gray-400',
-        iconBgColor: 'bg-gray-500/10'
-      };
-    }
-    
-    switch (invoice.status) {
-      case 'paid':
-        return {
-          label: 'paid',
-          bgColor: 'bg-green-500/20',
-          textColor: 'text-green-400',
-          iconColor: 'text-green-400',
-          iconBgColor: 'bg-green-500/10'
-        };
-      case 'pending':
-        return {
-          label: 'pending',
-          bgColor: 'bg-yellow-500/20',
-          textColor: 'text-yellow-400',
-          iconColor: 'text-yellow-400',
-          iconBgColor: 'bg-yellow-500/10'
-        };
-      case 'cancelled':
-        return {
-          label: 'cancelled',
-          bgColor: 'bg-red-500/20',
-          textColor: 'text-red-400',
-          iconColor: 'text-red-400',
-          iconBgColor: 'bg-red-500/10'
-        };
-      case 'expired':
-        return {
-          label: 'expired',
-          bgColor: 'bg-gray-500/20',
-          textColor: 'text-gray-400',
-          iconColor: 'text-gray-400',
-          iconBgColor: 'bg-gray-500/10'
-        };
-      default:
-        return {
-          label: invoice.status,
-          bgColor: 'bg-gray-500/20',
-          textColor: 'text-gray-400',
-          iconColor: 'text-gray-400',
-          iconBgColor: 'bg-gray-500/10'
-        };
-    }
-  };
-
-  // Helper function to get countdown for pending invoices
-  const getCountdown = (invoice: Invoice) => {
-    if (invoice.status !== 'pending' || !invoice.expiresAt) return null;
-    
-    const expiresAt = new Date(invoice.expiresAt).getTime();
-    const remainingMs = Math.max(0, expiresAt - currentTime);
-    
-    if (remainingMs <= 0) return 'Expired';
-    
-    const hours = Math.floor(remainingMs / (1000 * 60 * 60));
-    const minutes = Math.floor((remainingMs % (1000 * 60 * 60)) / (1000 * 60));
-    const seconds = Math.floor((remainingMs % (1000 * 60)) / 1000);
-    
-    if (hours > 0) {
-      return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-    }
-    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-  };
 
   const statsData = [
     {
@@ -175,79 +81,109 @@ export function Dashboard({ onNavigate, invoices, stats }: DashboardProps) {
   const quickActions = [
     {
       label: 'Create Invoice',
-      description: 'Generate professional invoices with Bitcoin payment addresses',
+      description: 'Generate invoices with Bitcoin payments',
       icon: TrendingUp,
       tab: 'invoices',
       emoji: '📝',
       gradient: 'from-blue-500 to-purple-600',
+      bgColor: 'bg-blue-500/20',
+      borderColor: 'border-blue-400/30',
+      hoverBg: 'hover:bg-blue-500/30',
+      hoverBorder: 'hover:border-blue-400/50',
+      iconBg: 'bg-blue-500/10',
+      iconBorder: 'border-blue-400/30',
+      iconHover: 'group-hover:bg-blue-500/20',
+      iconColor: 'text-blue-400',
     },
     {
       label: 'Track Payments',
-      description: 'Monitor all transactions and payment statuses',
+      description: 'Monitor transactions and payments',
       icon: Clock,
       tab: 'payments',
       emoji: '💸',
       gradient: 'from-green-500 to-teal-600',
+      bgColor: 'bg-green-500/20',
+      borderColor: 'border-green-400/30',
+      hoverBg: 'hover:bg-green-500/30',
+      hoverBorder: 'hover:border-green-400/50',
+      iconBg: 'bg-green-500/10',
+      iconBorder: 'border-green-400/30',
+      iconHover: 'group-hover:bg-green-500/20',
+      iconColor: 'text-green-400',
     },
     {
       label: 'Manage Vault',
-      description: 'Deposit BTC, borrow MUSD, and track collateral ratios',
+      description: 'Deposit BTC and borrow MUSD',
       icon: Vault,
       tab: 'vault',
       emoji: '🔐',
       gradient: 'from-orange-500 to-red-600',
+      bgColor: 'bg-orange-500/20',
+      borderColor: 'border-orange-400/30',
+      hoverBg: 'hover:bg-orange-500/30',
+      hoverBorder: 'hover:border-orange-400/50',
+      iconBg: 'bg-orange-500/10',
+      iconBorder: 'border-orange-400/30',
+      iconHover: 'group-hover:bg-orange-500/20',
+      iconColor: 'text-orange-400',
     },
     {
       label: 'View Analytics',
-      description: 'Get insights into your business performance and trends',
+      description: 'Business insights and trends',
       icon: Activity,
       tab: 'settings',
       emoji: '📊',
       gradient: 'from-purple-500 to-pink-600',
+      bgColor: 'bg-purple-500/20',
+      borderColor: 'border-purple-400/30',
+      hoverBg: 'hover:bg-purple-500/30',
+      hoverBorder: 'hover:border-purple-400/50',
+      iconBg: 'bg-purple-500/10',
+      iconBorder: 'border-purple-400/30',
+      iconHover: 'group-hover:bg-purple-500/20',
+      iconColor: 'text-purple-400',
     },
   ];
 
   return (
     <div className="flex-1 h-screen overflow-y-auto p-4 sm:p-6 lg:p-8 relative">
-      {/* Animated background */}
-      <div className="absolute inset-0 opacity-20 pointer-events-none">
+      {/* Subtle background pattern */}
+      <div className="absolute inset-0 opacity-5 pointer-events-none">
         <div className="w-full h-full" style={{
           backgroundImage: `
-            radial-gradient(circle at 25% 25%, rgba(120, 119, 198, 0.3) 0%, transparent 50%),
-            radial-gradient(circle at 75% 75%, rgba(255, 119, 198, 0.3) 0%, transparent 50%),
-            linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px)
+            linear-gradient(rgba(255, 255, 255, 0.01) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(255, 255, 255, 0.01) 1px, transparent 1px)
           `,
-          backgroundSize: '100% 100%, 100% 100%, 20px 20px, 20px 20px',
+          backgroundSize: '20px 20px',
         }} />
       </div>
       
       <div className="relative z-10">
         {/* Header */}
-        <div className="mb-8 lg:mb-12">
-          <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold mb-2 font-title bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent">
+        <div className="mb-6">
+          <h1 className="text-2xl sm:text-3xl font-bold mb-2 font-navbar text-white">
             Dashboard
           </h1>
-          <p className="text-foreground/60 text-lg">Welcome back! Here's what's happening with your business.</p>
+          <p className="text-sm font-navbar text-white/60">Welcome back! Here's what's happening with your business.</p>
         </div>
 
         {/* Stats Overview */}
         <div className="mb-8">
-          <h2 className="text-xl font-semibold mb-6 font-title">Business Overview</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          <h2 className="text-lg font-semibold mb-4 font-navbar text-white/90">Business Overview</h2>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             {statsData.map((stat) => (
-              <div key={stat.label} className="glass-card p-6 rounded-2xl">
-                <div className="flex items-center justify-between mb-4">
-                  <div className={`p-3 rounded-xl ${stat.bgColor}`}>
-                    <stat.icon className={`w-6 h-6 ${stat.color}`} />
+              <div key={stat.label} className="bg-[#2C2C2E]/40 backdrop-blur-xl border border-green-400/10 rounded-2xl p-4 hover:border-green-400/20 transition-all">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-10 h-10 rounded-lg border border-green-400/30 flex items-center justify-center">
+                    <stat.icon className="w-5 h-5 text-white" />
                   </div>
-                  <span className={`text-sm font-medium ${stat.change.startsWith('+') ? 'text-green-400' : stat.change.startsWith('-') ? 'text-red-400' : 'text-gray-400'}`}>
+                  <span className={`text-xs font-navbar font-medium ${stat.change.startsWith('+') ? 'text-green-400' : stat.change.startsWith('-') ? 'text-red-400' : 'text-gray-400'}`}>
                     {stat.change}
                   </span>
                 </div>
                 <div>
-                  <p className="text-2xl font-bold mb-1">{stat.value}</p>
-                  <p className="text-sm text-foreground/60">{stat.label}</p>
+                  <p className="text-xl font-bold font-navbar mb-1">{stat.value}</p>
+                  <p className="text-xs font-navbar text-white/60">{stat.label}</p>
                 </div>
               </div>
             ))}
@@ -255,97 +191,30 @@ export function Dashboard({ onNavigate, invoices, stats }: DashboardProps) {
         </div>
 
         {/* Quick Actions */}
-        <div className="mb-8">
-          <h2 className="text-xl font-semibold mb-6 font-title">Quick Actions</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div>
+          <h2 className="text-lg font-semibold mb-4 font-navbar text-white/90">Quick Actions</h2>
+          <div className="flex flex-wrap gap-3">
             {quickActions.map((action) => (
-              <button
-                key={action.label}
-                onClick={() => onNavigate(action.tab)}
-                className="glass-card p-6 rounded-2xl text-left group cursor-pointer hover:scale-105 transition-all duration-300"
-              >
-                <div className="flex items-center gap-4 mb-4">
-                  <div className="text-3xl">{action.emoji}</div>
-                  <div className={`w-12 h-12 rounded-xl bg-gradient-to-r ${action.gradient} flex items-center justify-center`}>
-                    <action.icon className="w-6 h-6 text-white" />
+              <div key={action.label} className="relative group">
+                <button
+                  onClick={() => onNavigate(action.tab)}
+                  className={`flex items-center gap-3 px-4 py-3 ${action.bgColor} border ${action.borderColor} rounded-full ${action.hoverBg} ${action.hoverBorder} transition-all duration-200 group`}
+                >
+                  <div className={`w-8 h-8 rounded-lg ${action.iconBg} border ${action.iconBorder} flex items-center justify-center ${action.iconHover} transition-all`}>
+                    <action.icon className={`w-4 h-4 text-white`} />
                   </div>
-                </div>
-                <h3 className="text-lg font-semibold mb-2 font-title group-hover:text-white transition-colors">
-                  {action.label}
-                </h3>
-                <p className="text-sm text-foreground/60 leading-relaxed">
+                  <span className="text-sm font-navbar text-white/80 group-hover:text-white transition-colors">
+                    {action.label}
+                  </span>
+                </button>
+                {/* Tooltip */}
+                <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 px-3 py-2 bg-gray-800/95 backdrop-blur-sm text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-200 pointer-events-none z-50 shadow-lg border border-gray-600/30">
                   {action.description}
-                </p>
-              </button>
+                  <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-3 border-r-3 border-b-3 border-transparent border-b-gray-800/95"></div>
+                </div>
+              </div>
             ))}
           </div>
-        </div>
-
-        {/* Recent Activity */}
-        <div className="glass-card p-6 rounded-2xl">
-          <h2 className="text-xl font-semibold mb-6 font-title">Recent Activity</h2>
-          {recentInvoices.length > 0 ? (
-            <div className="space-y-4">
-              {recentInvoices.map((invoice) => {
-                const statusInfo = getStatusInfo(invoice);
-                const countdown = getCountdown(invoice);
-                const displayDate = invoice.paidAt || invoice.createdAt;
-                
-                return (
-                  <div key={invoice.id} className="flex items-center justify-between p-4 rounded-xl bg-white/5 border border-white/10">
-                    <div className="flex items-center gap-4">
-                      <div className={`p-2 rounded-lg ${statusInfo.iconBgColor}`}>
-                        <FileText className={`w-5 h-5 ${statusInfo.iconColor}`} />
-                      </div>
-                      <div>
-                        <p className="font-medium">{invoice.clientName}</p>
-                        <p className="text-sm text-white/50">
-                          {invoice.status === 'paid' ? 'Paid' : 'Created'} {new Date(displayDate).toLocaleDateString()}
-                        </p>
-                        {countdown && (
-                          <div className="flex items-center gap-1 mt-1">
-                            <Clock className="w-3 h-3 text-orange-400" />
-                            <span className="text-xs text-orange-400 font-mono">
-                              {countdown}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-semibold">{invoice.amount.toFixed(8)} BTC</p>
-                      <p className="text-xs text-white/60">${invoice.musdAmount.toFixed(2)}</p>
-                      <span className={`text-xs px-2 py-1 rounded-full ${statusInfo.bgColor} ${statusInfo.textColor}`}>
-                        {statusInfo.label}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
-              <div className="text-center pt-4">
-                <button
-                  onClick={() => onNavigate('invoices')}
-                  className="text-orange-400 hover:text-orange-300 text-sm font-medium"
-                >
-                  View All Invoices →
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="flex flex-col items-center justify-center py-16 text-center">
-              <div className="w-20 h-20 rounded-full bg-gradient-to-r from-blue-500/20 to-purple-500/20 flex items-center justify-center mb-6">
-                <div className="text-4xl">📊</div>
-              </div>
-              <h3 className="text-lg font-semibold mb-2 font-title">No activity yet</h3>
-              <p className="text-foreground/60 text-sm mb-4">Start by creating your first invoice to see activity here</p>
-              <button
-                onClick={() => onNavigate('invoices')}
-                className="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-xl font-medium hover:from-blue-600 hover:to-purple-700 transition-all duration-300"
-              >
-                Create Invoice
-              </button>
-            </div>
-          )}
         </div>
       </div>
     </div>

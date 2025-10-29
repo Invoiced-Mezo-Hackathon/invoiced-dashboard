@@ -66,17 +66,17 @@ export function InvoiceQRModal({ invoice, isOpen, onClose }: InvoiceQRModalProps
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="glass p-8 rounded-3xl border border-white/20 w-full max-w-md mx-4 relative">
+      <div className="bg-[#2C2C2E]/90 backdrop-blur-xl p-8 rounded-3xl border border-green-400/20 w-full max-w-md mx-4 relative">
         <button
           onClick={onClose}
-          className="absolute top-6 right-6 w-8 h-8 rounded-full flex items-center justify-center hover:bg-white/10 transition-colors"
+          className="absolute top-6 right-6 w-8 h-8 rounded-full bg-white/10 border border-white/20 flex items-center justify-center hover:bg-white/20 transition-all"
         >
-          <X className="w-5 h-5" />
+          <i className="fa-solid fa-xmark text-white text-sm"></i>
         </button>
 
         <div className="text-center">
-          <h2 className="text-2xl font-bold font-title mb-2">Share Invoice</h2>
-          <p className="text-white/60 mb-6">Scan QR code or share the link</p>
+          <h2 className="text-2xl font-bold font-navbar mb-2 text-white">Share Invoice</h2>
+          <p className="text-white/60 mb-6 font-navbar">Scan QR code or share the link</p>
 
           {/* QR Code */}
           <div className="mb-6 flex justify-center">
@@ -92,24 +92,24 @@ export function InvoiceQRModal({ invoice, isOpen, onClose }: InvoiceQRModalProps
           </div>
 
           {/* Invoice Details */}
-          <div className="glass p-4 rounded-2xl border border-white/10 mb-6 text-left">
+          <div className="bg-[#2C2C2E]/40 backdrop-blur-xl p-4 rounded-2xl border border-green-400/10 mb-6 text-left">
             <div className="space-y-2">
               <div className="flex justify-between">
-                <span className="text-white/60">Client:</span>
-                <span className="font-medium">{invoice.clientName}</span>
+                <span className="text-white/60 font-navbar">Client:</span>
+                <span className="font-medium text-white font-navbar">{invoice.clientName}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-white/60">Amount:</span>
-                <span className="font-medium">{invoice.currency} {invoice.amount.toFixed(2)}</span>
+                <span className="text-white/60 font-navbar">Amount:</span>
+                <span className="font-medium text-white font-navbar">{invoice.currency} {invoice.amount.toFixed(2)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-white/60">MUSD:</span>
-                <span className="font-medium">{invoice.musdAmount.toFixed(2)} MUSD</span>
+                <span className="text-white/60 font-navbar">MUSD:</span>
+                <span className="font-medium text-white font-navbar">{invoice.musdAmount.toFixed(2)} MUSD</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-white/60">Status:</span>
+                <span className="text-white/60 font-navbar">Status:</span>
                 <span className={cn(
-                  "px-2 py-1 rounded-full text-xs font-medium",
+                  "px-2 py-1 rounded-full text-xs font-medium font-navbar",
                   invoice.status === 'pending' && "bg-yellow-500/20 text-yellow-400",
                   invoice.status === 'paid' && "bg-green-500/20 text-green-400",
                   invoice.status === 'cancelled' && "bg-red-500/20 text-red-400"
@@ -124,16 +124,16 @@ export function InvoiceQRModal({ invoice, isOpen, onClose }: InvoiceQRModalProps
           <div className="flex gap-3">
             <button
               onClick={handleCopyLink}
-              className="flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-white/10 hover:bg-white/20 transition-colors border border-white/20"
+              className="flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-[#2C2C2E]/40 hover:bg-green-500/20 transition-colors border border-green-400/20 text-white font-navbar"
             >
-              <Copy className="w-4 h-4" />
+              <i className="fa-solid fa-copy"></i>
               Copy Link
             </button>
             <button
               onClick={handleDownloadQR}
-              className="flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-orange-400 hover:bg-orange-500 text-white transition-colors"
+              className="flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-green-500 hover:bg-green-600 text-white transition-colors font-navbar"
             >
-              <Download className="w-4 h-4" />
+              <i className="fa-solid fa-download"></i>
               Download QR
             </button>
           </div>
