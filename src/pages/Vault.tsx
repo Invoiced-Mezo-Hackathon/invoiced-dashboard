@@ -29,6 +29,7 @@ export function Vault() {
     depositCollateral,
     borrowMUSD,
     repayMUSD,
+    approveMUSD,
     withdrawCollateral,
     sendBitcoin,
     isPending,
@@ -39,11 +40,14 @@ export function Vault() {
     isBorrowSuccess,
     isRepaySuccess,
     isWithdrawSuccess,
+    isApprovalSuccess,
     depositHash,
     borrowHash,
     repayHash,
     withdrawHash,
     sendBitcoinHash,
+    approvalHash,
+    musdAllowance,
   } = useMezoVault();
 
   const handleAction = async () => {
@@ -61,7 +65,19 @@ export function Vault() {
           await borrowMUSD(actionAmount);
           break;
         case 'repay':
-          await repayMUSD(actionAmount);
+          // Check if approval is needed first
+          const repayAmountInWei = BigInt(parseFloat(actionAmount) * 1e18);
+          const currentAllowance = BigInt(parseFloat(musdAllowance) * 1e18);
+          
+          if (currentAllowance < repayAmountInWei) {
+            // Need approval first
+            await approveMUSD(actionAmount);
+            // Don't close modal yet - user will need to repay after approval
+            return;
+          } else {
+            // Direct repay
+            await repayMUSD(actionAmount);
+          }
           break;
         case 'withdraw':
           await withdrawCollateral(actionAmount);
@@ -137,55 +153,10 @@ export function Vault() {
   };
 
   return (
-    <div className="flex-1 h-screen overflow-y-auto p-4 sm:p-6 lg:p-8">
-      <div className="mb-6 lg:mb-8">
-        <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold mb-2 font-title">Vault</h1>
-        <p className="text-sm sm:text-base text-white/60">Manage your collateral and borrowing</p>
-      </div>
-
-      {/* Educational Section */}
-      <div className="max-w-2xl mx-auto mb-8 glass p-6 rounded-2xl border border-white/10">
-        <h2 className="text-xl font-bold mb-3 text-green-400">💰 How the Vault Works</h2>
-        <div className="space-y-3 text-sm text-white/80">
-          <div className="flex items-start gap-3">
-            <span className="text-2xl">1️⃣</span>
-            <div>
-              <p className="font-semibold">Deposit BTC</p>
-              <p className="text-white/60">Lock your Bitcoin in the vault as collateral (you keep ownership)</p>
-            </div>
-          </div>
-          <div className="flex items-start gap-3">
-            <span className="text-2xl">2️⃣</span>
-            <div>
-              <p className="font-semibold">Borrow MUSD</p>
-              <p className="text-white/60">Get stablecoins to spend, trade, or use in DeFi - at 2.5% fixed APR</p>
-            </div>
-          </div>
-          <div className="flex items-start gap-3">
-            <span className="text-2xl">3️⃣</span>
-            <div>
-              <p className="font-semibold">Spend Your MUSD</p>
-              <p className="text-white/60">Use MUSD anywhere - send to anyone, use in other DeFi apps, or convert to cash</p>
-            </div>
-          </div>
-          <div className="flex items-start gap-3">
-            <span className="text-2xl">4️⃣</span>
-            <div>
-              <p className="font-semibold">Repay & Withdraw</p>
-              <p className="text-white/60">Pay back when you want (no deadlines), get your BTC back</p>
-            </div>
-          </div>
-        </div>
-        <div className="mt-4 p-4 bg-green-500/10 border border-green-500/20 rounded-lg">
-          <p className="text-green-400 font-semibold mb-1">✨ Benefits:</p>
-          <ul className="text-sm text-white/70 space-y-1">
-            <li>✅ Keep your BTC (HODL) while accessing liquidity</li>
-            <li>✅ Low 2.5% fixed interest (vs 8-20% variable rates elsewhere)</li>
-            <li>✅ No repayment deadlines - pay back whenever</li>
-            <li>✅ 90% of collateral value available to borrow</li>
-            <li>✅ Use MUSD anywhere or cash out anytime</li>
-          </ul>
-        </div>
+    <div className="flex-1 h-screen overflow-y-auto p-8">
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold mb-2 font-title">Vault</h1>
+        <p className="text-white/60">Manage your collateral and borrowing</p>
       </div>
 
       <div className="max-w-2xl mx-auto space-y-8">
@@ -269,8 +240,21 @@ export function Vault() {
           </div>
         </div>
 
+        {/* mats Rewards Banner */}
+        <div className="glass p-4 rounded-2xl border border-purple-500/20 bg-purple-500/10">
+          <div className="flex items-center gap-3">
+            <span className="text-3xl">🎁</span>
+            <div>
+              <h3 className="font-bold text-purple-400">Earn mats Rewards</h3>
+              <p className="text-sm text-white/70">
+                Coming Soon: Earn loyalty points on every deposit and borrow!
+              </p>
+            </div>
+          </div>
+        </div>
+
         {/* Action Buttons */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-5 gap-4">
           {(['deposit', 'borrow', 'repay', 'withdraw', 'send'] as const).map((action) => {
             const getActionDescription = (action: string) => {
               switch (action) {
@@ -355,12 +339,45 @@ export function Vault() {
           <div className="glass p-4 rounded-2xl border border-red-500/20 bg-red-500/10">
             <div className="flex items-center gap-2">
               <AlertCircle className="w-5 h-5 text-red-400" />
-              <p className="text-red-400">{error}</p>
+              <div className="flex-1">
+                <p className="text-red-400 font-semibold">Transaction Failed</p>
+                <p className="text-red-300 text-sm mt-1">{error}</p>
+                <div className="mt-3 space-y-2">
+                  {error.includes('cancelled') && (
+                    <p className="text-red-200 text-xs">💡 Try again when ready</p>
+                  )}
+                  {error.includes('insufficient') && (
+                    <p className="text-red-200 text-xs">💡 Check your BTC balance or reduce amount</p>
+                  )}
+                  {error.includes('collateral') && (
+                    <p className="text-red-200 text-xs">💡 Deposit more BTC first to increase collateral</p>
+                  )}
+                  {error.includes('gas') && (
+                    <p className="text-red-200 text-xs">💡 Try increasing gas limit in your wallet</p>
+                  )}
+                  {error.includes('Vault does not exist') && (
+                    <p className="text-red-200 text-xs">💡 Click "Deposit" first to create your vault</p>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         )}
 
         {/* Pending Transaction Notifications - Stage-Specific */}
+        {approvalHash && isPending && (
+          <div className="glass p-4 rounded-2xl border border-orange-500/20 bg-orange-500/10">
+            <div className="flex items-center gap-2">
+              <Loader2 className="w-5 h-5 text-orange-400 animate-spin" />
+              <div>
+                <p className="text-orange-400 font-semibold">🔐 Approving MUSD...</p>
+                <p className="text-orange-300 text-sm">Setting up permission to repay your loan</p>
+                <a href={`https://explorer.test.mezo.org/tx/${approvalHash}`} target="_blank" rel="noopener noreferrer" className="text-orange-300 text-xs underline hover:text-orange-200 inline-block mt-1">📄 View Transaction →</a>
+              </div>
+            </div>
+          </div>
+        )}
+
         {depositHash && isPending && (
           <div className="glass p-4 rounded-2xl border border-orange-500/20 bg-orange-500/10">
             <div className="flex items-center gap-2">
@@ -414,6 +431,40 @@ export function Vault() {
         )}
 
         {/* Action-Specific Success Popups */}
+        {isApprovalSuccess && (
+          <div className="glass p-4 rounded-2xl border border-green-500/20 bg-green-500/10 animate-pulse">
+            <div className="flex items-center gap-2">
+              <CheckCircle className="w-5 h-5 text-green-400" />
+              <div>
+                <p className="text-green-400 font-semibold">✓ MUSD Approved Successfully!</p>
+                <p className="text-green-300 text-sm mt-1">🔐 You can now repay your loan</p>
+                <p className="text-green-300 text-sm">💰 Click "Repay" again to complete the repayment</p>
+                <Button
+                  onClick={() => {
+                    // Trigger repay after approval
+                    if (actionAmount) {
+                      repayMUSD(actionAmount);
+                    }
+                  }}
+                  className="mt-2 bg-green-500 hover:bg-green-600 text-white text-xs px-3 py-1"
+                >
+                  💸 Complete Repay Now
+                </Button>
+                {approvalHash && (
+                  <a 
+                    href={`https://explorer.test.mezo.org/tx/${approvalHash}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-green-300 text-xs underline hover:text-green-200 inline-block mt-1"
+                  >
+                    📄 View Approval Transaction →
+                  </a>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         {isDepositSuccess && (
           <div className="glass p-4 rounded-2xl border border-green-500/20 bg-green-500/10 animate-pulse">
             <div className="flex items-center gap-2">
@@ -616,12 +667,14 @@ export function Vault() {
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                     {activeAction === 'deposit' && 'Confirming deposit...'}
                     {activeAction === 'borrow' && 'Borrowing MUSD...'}
-                    {activeAction === 'repay' && 'Repaying loan...'}
+                    {activeAction === 'repay' && (approvalHash ? 'Approving MUSD...' : 'Repaying loan...')}
                     {activeAction === 'withdraw' && 'Withdrawing BTC...'}
                     {activeAction === 'send' && 'Sending BTC...'}
                   </>
                 ) : (
-                  `Confirm ${getActionTitle()}`
+                  activeAction === 'repay' && parseFloat(musdAllowance) < parseFloat(actionAmount || '0') 
+                    ? 'Approve MUSD First' 
+                    : `Confirm ${getActionTitle()}`
                 )}
               </Button>
             </div>

@@ -3,6 +3,7 @@ import { useAccount } from 'wagmi';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { Header } from '@/components/layout/Header';
 import { NetworkSwitchModal } from '@/components/ui/NetworkSwitchModal';
+import { ToastProvider, ToastViewport } from '@/components/ui/toast';
 import { Dashboard } from '@/pages/Dashboard';
 import { Invoices } from '@/pages/Invoices';
 import { Payments } from '@/pages/Payments';
@@ -11,17 +12,38 @@ import { Settings } from '@/pages/Settings';
 import { useWalletUtils } from '@/hooks/useWalletUtils';
 import { useNetworkNotifications } from '@/hooks/useNetworkNotifications';
 import { useInvoiceContract } from '@/hooks/useInvoiceContract';
+import { invoiceStorage } from '@/services/invoice-storage';
+import { Invoice } from '@/types/invoice';
 
 function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [showNetworkModal, setShowNetworkModal] = useState(false);
   const [hasShownNetworkPrompt, setHasShownNetworkPrompt] = useState(false);
+  const [localInvoices, setLocalInvoices] = useState<Invoice[]>([]);
 
   const { isConnected, chainId } = useAccount();
   const { isMezoTestnet } = useWalletUtils();
   
   // Get invoices from blockchain
   const { invoices, stats } = useInvoiceContract();
+  
+  // Load local invoices and refresh periodically
+  useEffect(() => {
+    const loadLocalInvoices = () => {
+      const drafts = invoiceStorage.listDrafts();
+      setLocalInvoices(drafts);
+    };
+    
+    loadLocalInvoices();
+    
+    // Refresh every 5 seconds to keep data in sync
+    const interval = setInterval(loadLocalInvoices, 5000);
+    
+    return () => clearInterval(interval);
+  }, []);
+
+  // Combine blockchain invoices with local invoices
+  const allInvoices = [...invoices, ...localInvoices];
   
   // Enable network notifications
   useNetworkNotifications();
@@ -44,22 +66,22 @@ function App() {
   const renderContent = () => {
     switch (activeTab) {
       case 'dashboard':
-        return <Dashboard onNavigate={setActiveTab} invoices={invoices} stats={stats} />;
+        return <Dashboard onNavigate={setActiveTab} invoices={allInvoices} stats={stats} />;
       case 'invoices':
-        return <Invoices invoices={invoices} />;
+        return <Invoices invoices={allInvoices} />;
       case 'payments':
-        return <Payments invoices={invoices} />;
+        return <Payments invoices={allInvoices} />;
       case 'vault':
         return <Vault />;
       case 'settings':
         return <Settings />;
       default:
-        return <Dashboard onNavigate={setActiveTab} invoices={invoices} stats={stats} />;
+        return <Dashboard onNavigate={setActiveTab} invoices={allInvoices} stats={stats} />;
     }
   };
 
   return (
-    <>
+    <ToastProvider>
       <div className="flex h-screen bg-background text-foreground overflow-hidden">
         {/* Sidebar */}
         <Sidebar 
@@ -87,7 +109,10 @@ function App() {
         isOpen={showNetworkModal}
         onClose={() => setShowNetworkModal(false)}
       />
-    </>
+      
+      {/* Toast Viewport */}
+      <ToastViewport />
+    </ToastProvider>
   );
 }
 

@@ -11,8 +11,9 @@ export interface BoarConfig {
 
 export const BOAR_CONFIG: BoarConfig = {
   apiKey: import.meta.env.VITE_BOAR_API_KEY || 'WfNc1YhD65vUESGOdWFMCGrvl6S5FMgg',
-  wsUrl: import.meta.env.VITE_BOAR_WS_URL || 'wss://rpc.boar.network/ws', // Updated URL
-  httpUrl: import.meta.env.VITE_BOAR_HTTP_URL || 'https://rpc.boar.network/api', // Updated URL
+  // Boar Network Mezo endpoints from https://dashboard.boar.network/personal/free
+  wsUrl: import.meta.env.VITE_BOAR_WS_URL || 'wss://rpc-ws.mezo.boar.network/WfNc1YhD65vUESGOdWFMCGrvl6S5FMgg',
+  httpUrl: import.meta.env.VITE_BOAR_HTTP_URL || 'https://rpc-http.mezo.boar.network/WfNc1YhD65vUESGOdWFMCGrvl6S5FMgg',
   reconnectInterval: 5000, // 5 seconds
   maxReconnectAttempts: 10,
 };

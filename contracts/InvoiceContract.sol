@@ -15,6 +15,12 @@ contract InvoiceContract {
         bool cancelled;              // Cancellation status
         uint256 createdAt;           // Creation timestamp
         uint256 paidAt;              // Payment confirmation timestamp
+        uint256 expiresAt;           // Invoice expiry timestamp (1 hour from creation)
+        string payToAddress;         // Actual payment destination address (used by BOAR)
+        string paymentTxHash;         // Bitcoin transaction hash when payment confirmed
+        string observedInboundAmount; // Actual amount received (may differ from requested)
+        string currency;              // Invoice currency (USD/KES/BTC)
+        string balanceAtCreation;     // Balance snapshot for payment verification
     }
     
     mapping(uint256 => Invoice) public invoices;
@@ -27,9 +33,12 @@ contract InvoiceContract {
         address indexed recipient, 
         uint256 amount,
         string bitcoinAddress,
-        string clientName
+        string clientName,
+        string payToAddress,
+        string currency,
+        uint256 expiresAt
     );
-    event InvoicePaid(uint256 indexed id, uint256 amount, uint256 timestamp);
+    event InvoicePaid(uint256 indexed id, uint256 amount, uint256 timestamp, string paymentTxHash, string observedInboundAmount);
     event InvoiceCancelled(uint256 indexed id, uint256 timestamp);
     
     function createInvoice(
@@ -38,11 +47,17 @@ contract InvoiceContract {
         string memory _description,
         string memory _bitcoinAddress,
         string memory _clientName,
-        string memory _clientCode
+        string memory _clientCode,
+        uint256 _expiresAt,
+        string memory _payToAddress,
+        string memory _currency,
+        string memory _balanceAtCreation
     ) public returns (uint256) {
         invoiceCount++;
-        invoices[invoiceCount] = Invoice({
-            id: invoiceCount,
+        uint256 newInvoiceId = invoiceCount;
+        
+        invoices[newInvoiceId] = Invoice({
+            id: newInvoiceId,
             creator: payable(msg.sender),
             recipient: _recipient,
             amount: _amount,
@@ -53,24 +68,33 @@ contract InvoiceContract {
             paid: false,
             cancelled: false,
             createdAt: block.timestamp,
-            paidAt: 0
+            paidAt: 0,
+            expiresAt: _expiresAt,
+            payToAddress: _payToAddress,
+            paymentTxHash: "",
+            observedInboundAmount: "",
+            currency: _currency,
+            balanceAtCreation: _balanceAtCreation
         });
         
         // Track invoice for creator
-        userInvoices[msg.sender].push(invoiceCount);
+        userInvoices[msg.sender].push(newInvoiceId);
         
         emit InvoiceCreated(
-            invoiceCount, 
+            newInvoiceId, 
             msg.sender, 
             _recipient, 
             _amount,
             _bitcoinAddress,
-            _clientName
+            _clientName,
+            _payToAddress,
+            _currency,
+            _expiresAt
         );
-        return invoiceCount;
+        return newInvoiceId;
     }
     
-    function confirmPayment(uint256 _id) public {
+    function confirmPayment(uint256 _id, string memory _paymentTxHash, string memory _observedInboundAmount) public {
         require(_id > 0 && _id <= invoiceCount, "Invalid invoice ID");
         require(invoices[_id].creator == msg.sender, "Only invoice creator can confirm payment");
         require(!invoices[_id].paid, "Invoice already paid");
@@ -78,8 +102,10 @@ contract InvoiceContract {
         
         invoices[_id].paid = true;
         invoices[_id].paidAt = block.timestamp;
+        invoices[_id].paymentTxHash = _paymentTxHash;
+        invoices[_id].observedInboundAmount = _observedInboundAmount;
         
-        emit InvoicePaid(_id, invoices[_id].amount, block.timestamp);
+        emit InvoicePaid(_id, invoices[_id].amount, block.timestamp, _paymentTxHash, _observedInboundAmount);
     }
     
     function cancelInvoice(uint256 _id) public {

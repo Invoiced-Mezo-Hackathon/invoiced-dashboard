@@ -13,6 +13,9 @@
     "deploy:mezo": "hardhat run scripts/deploy.ts --network mezotestnet",
     "node": "hardhat node"
   },
+  "overrides": {
+    "esbuild": "0.18.20"
+  },
   "dependencies": {
     "@blinkdotnew/sdk": "^0.18.3",
     "@dnd-kit/core": "^6.3.1",

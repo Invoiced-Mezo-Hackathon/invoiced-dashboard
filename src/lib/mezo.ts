@@ -22,12 +22,12 @@ export interface MezoTransaction {
 // Mezo Testnet Contract Addresses
 // These are the actual deployed addresses on Mezo testnet
 export const MEZO_CONTRACTS = {
-  MUSD_TOKEN: '0x7654b902c802438D55dd8C242e7d8535506D89BD', // MUSD Token (verified)
+  MUSD_TOKEN: '0xbe4363AbD7c8A4EB0888eD8b90c32E02d7CFbD27', // MUSD Token (verified)
   BORROW_MANAGER: '0x1234567890123456789012345678901234567890', // Placeholder - will be updated after deployment
   STABILITY_POOL: '0x1234567890123456789012345678901234567890', // Placeholder - will be updated after deployment
   TROVE_MANAGER: '0x1234567890123456789012345678901234567890', // Placeholder - will be updated after deployment
-  MEZO_VAULT: '0x773530c39Ff8B8DD8ad961086EA9E9DBB9B84BfF', // Our custom vault contract - deployed ✅
-  INVOICE_CONTRACT: '0xEAB6C13EFCFaD2e40EA72F66d1AAA6058B7DDEE9', // Invoice contract - deployed ✅
+  MEZO_VAULT: '0x5EA6656ABC65C88125530234E70579841a0A3701', // Our custom vault contract - will be updated after deployment
+  INVOICE_CONTRACT: '0xF3De98fc5da07D98a59cFAAC45D13f6d39cCEe24', // Updated Invoice contract with new fields
 };
 
 // Contract ABIs for Mezo integration
@@ -68,23 +68,23 @@ export const BORROW_MANAGER_ABI = [
 
 export const INVOICE_CONTRACT_ABI = [
   // Invoice management functions
-  "function createInvoice(address _recipient, uint256 _amount, string memory _description, string memory _bitcoinAddress, string memory _clientName, string memory _clientCode) returns (uint256)",
-  "function confirmPayment(uint256 _id)",
+  "function createInvoice(address _recipient, uint256 _amount, string memory _description, string memory _bitcoinAddress, string memory _clientName, string memory _clientCode, uint256 _expiresAt, string memory _payToAddress, string memory _currency, string memory _balanceAtCreation) returns (uint256)",
+  "function confirmPayment(uint256 _id, string memory _paymentTxHash, string memory _observedInboundAmount)",
   "function cancelInvoice(uint256 _id)",
   // View functions
-  "function getInvoice(uint256 _id) view returns (tuple(uint256 id, address creator, address recipient, uint256 amount, string description, string bitcoinAddress, string clientName, string clientCode, bool paid, bool cancelled, uint256 createdAt, uint256 paidAt))",
+  "function getInvoice(uint256 _id) view returns (tuple(uint256 id, address creator, address recipient, uint256 amount, string description, string bitcoinAddress, string clientName, string clientCode, bool paid, bool cancelled, uint256 createdAt, uint256 paidAt, uint256 expiresAt, string payToAddress, string paymentTxHash, string observedInboundAmount, string currency, string balanceAtCreation))",
   "function getUserInvoices(address _user) view returns (uint256[])",
   "function getPaidInvoices(address _user) view returns (uint256[])",
   "function getPendingInvoices(address _user) view returns (uint256[])",
   "function getTotalRevenue(address _user) view returns (uint256)",
   "function getPendingAmount(address _user) view returns (uint256)",
   "function getUserInvoiceCount(address _user) view returns (uint256)",
-  "function getAllInvoices() view returns (tuple(uint256 id, address creator, address recipient, uint256 amount, string description, string bitcoinAddress, string clientName, string clientCode, bool paid, bool cancelled, uint256 createdAt, uint256 paidAt)[])",
+  "function getAllInvoices() view returns (tuple(uint256 id, address creator, address recipient, uint256 amount, string description, string bitcoinAddress, string clientName, string clientCode, bool paid, bool cancelled, uint256 createdAt, uint256 paidAt, uint256 expiresAt, string payToAddress, string paymentTxHash, string observedInboundAmount, string currency, string balanceAtCreation)[])",
   "function getInvoicesByStatus(bool includePaid, bool includeCancelled) view returns (uint256[])",
   "function invoiceCount() view returns (uint256)",
   // Events
-  "event InvoiceCreated(uint256 indexed id, address indexed creator, address indexed recipient, uint256 amount, string bitcoinAddress, string clientName)",
-  "event InvoicePaid(uint256 indexed id, uint256 amount, uint256 timestamp)",
+  "event InvoiceCreated(uint256 indexed id, address indexed creator, address indexed recipient, uint256 amount, string bitcoinAddress, string clientName, string payToAddress, string currency, uint256 expiresAt)",
+  "event InvoicePaid(uint256 indexed id, uint256 amount, uint256 timestamp, string paymentTxHash, string observedInboundAmount)",
   "event InvoiceCancelled(uint256 indexed id, uint256 timestamp)",
 ] as const;
 

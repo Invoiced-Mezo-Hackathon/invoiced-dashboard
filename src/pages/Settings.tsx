@@ -8,6 +8,8 @@ import { useWalletUtils } from '@/hooks/useWalletUtils';
 import { toast } from 'react-hot-toast';
 import { SettingsSection } from '@/components/settings/SettingsSection';
 import { AutoSaveIndicator } from '@/components/settings/AutoSaveIndicator';
+import { invoiceStorage } from '@/services/invoice-storage';
+import { transactionStorage } from '@/services/transaction-storage';
 
 interface UserSettings {
   name: string;
@@ -166,18 +168,26 @@ export function Settings() {
   };
 
   const handleClearData = () => {
-    if (!window.confirm('Are you sure you want to clear all settings? This cannot be undone.')) {
+    if (!window.confirm('Are you sure you want to clear ALL data? This will remove all invoices, transactions, and settings. This cannot be undone.')) {
       return;
     }
 
     if (address) {
+      // Clear settings
       localStorage.removeItem(`invoiced_settings_${address}`);
       setName('');
       setBusinessName('');
       setDefaultPaymentTerms(30);
       setDefaultTaxRate(0);
       setNotificationsEnabled(false);
-      toast.success('Settings cleared');
+      
+      // Clear invoices
+      invoiceStorage.clearAllInvoices();
+      
+      // Clear transactions
+      transactionStorage.clearAllTransactions();
+      
+      toast.success('All data cleared successfully');
     }
   };
 
@@ -207,11 +217,11 @@ export function Settings() {
   }
 
   return (
-    <div className="flex-1 h-screen overflow-y-auto p-4 sm:p-6 lg:p-8">
+    <div className="flex-1 h-screen overflow-y-auto p-6 sm:p-8">
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold mb-2 font-title">Settings</h1>
-          <p className="text-xs sm:text-sm lg:text-base text-foreground/60">Manage your profile and preferences</p>
+          <h1 className="text-3xl font-bold mb-2 font-title">Settings</h1>
+          <p className="text-foreground/60">Manage your profile and preferences</p>
         </div>
         <AutoSaveIndicator status={saveStatus} />
       </div>
@@ -420,9 +430,9 @@ export function Settings() {
             >
               <Trash2 className="w-5 h-5 text-red-400" />
               <div className="text-left flex-1">
-                <p className="text-sm font-medium text-red-400">Clear All Settings</p>
+                <p className="text-sm font-medium text-red-400">Clear All Data</p>
                 <p className="text-xs text-foreground/60">
-                  Reset all settings to default (cannot be undone)
+                  Reset all invoices, transactions, and settings (cannot be undone)
                 </p>
               </div>
             </button>

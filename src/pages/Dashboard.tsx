@@ -1,18 +1,7 @@
 import { TrendingUp, Clock, Vault, Activity, DollarSign, Users, FileText, CreditCard } from 'lucide-react';
-
-interface Invoice {
-  id: string;
-  clientName: string;
-  clientCode: string;
-  details: string;
-  amount: number;
-  currency: string;
-  musdAmount: number;
-  status: 'pending' | 'paid' | 'cancelled';
-  createdAt: string;
-  wallet: string;
-  bitcoinAddress?: string;
-}
+import { Invoice } from '@/types/invoice';
+import { cn } from '@/lib/utils';
+import { useState, useEffect } from 'react';
 
 interface InvoiceStats {
   totalRevenue: number;
@@ -29,19 +18,124 @@ interface DashboardProps {
 }
 
 export function Dashboard({ onNavigate, invoices, stats }: DashboardProps) {
+  const [currentTime, setCurrentTime] = useState(Date.now());
+
+  // Update current time every second for countdown timers
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentTime(Date.now());
+    }, 1000);
+    
+    return () => clearInterval(interval);
+  }, []);
+
   // Use stats from hook if available, otherwise calculate from invoices
   const totalRevenue = stats?.totalRevenue ?? invoices
     .filter(invoice => invoice.status === 'paid')
-    .reduce((sum, invoice) => sum + invoice.amount, 0);
+    .reduce((sum, invoice) => {
+      // Use observedInboundAmount if available (convert from wei), otherwise use amount
+      const paidAmount = invoice.observedInboundAmount 
+        ? parseFloat(invoice.observedInboundAmount) / 1e18 
+        : invoice.amount;
+      return sum + paidAmount;
+    }, 0);
   
-  const activeInvoices = stats?.activeInvoices ?? invoices.filter(invoice => invoice.status === 'pending').length;
+  // Active invoices: pending and not expired
+  const activeInvoices = stats?.activeInvoices ?? invoices.filter(invoice => 
+    invoice.status === 'pending' && 
+    (!invoice.expiresAt || new Date(invoice.expiresAt) > new Date())
+  ).length;
+  
   const totalInvoices = stats?.totalInvoices ?? invoices.length;
+  
+  // Pending amount: only from non-expired pending invoices
   const pendingAmount = stats?.pendingAmount ?? invoices
-    .filter(invoice => invoice.status === 'pending')
+    .filter(invoice => 
+      invoice.status === 'pending' && 
+      (!invoice.expiresAt || new Date(invoice.expiresAt) > new Date())
+    )
     .reduce((sum, invoice) => sum + invoice.amount, 0);
 
-  // Get recent invoices (last 5)
+  // Get recent invoices (last 5) - show all statuses
   const recentInvoices = invoices.slice(0, 5);
+
+  // Helper function to get status color and label
+  const getStatusInfo = (invoice: Invoice) => {
+    const expiresAt = invoice.expiresAt ? new Date(invoice.expiresAt).getTime() : 0;
+    const isExpired = invoice.status === 'pending' && expiresAt > 0 && expiresAt <= currentTime;
+    
+    if (isExpired) {
+      return {
+        label: 'expired',
+        bgColor: 'bg-gray-500/20',
+        textColor: 'text-gray-400',
+        iconColor: 'text-gray-400',
+        iconBgColor: 'bg-gray-500/10'
+      };
+    }
+    
+    switch (invoice.status) {
+      case 'paid':
+        return {
+          label: 'paid',
+          bgColor: 'bg-green-500/20',
+          textColor: 'text-green-400',
+          iconColor: 'text-green-400',
+          iconBgColor: 'bg-green-500/10'
+        };
+      case 'pending':
+        return {
+          label: 'pending',
+          bgColor: 'bg-yellow-500/20',
+          textColor: 'text-yellow-400',
+          iconColor: 'text-yellow-400',
+          iconBgColor: 'bg-yellow-500/10'
+        };
+      case 'cancelled':
+        return {
+          label: 'cancelled',
+          bgColor: 'bg-red-500/20',
+          textColor: 'text-red-400',
+          iconColor: 'text-red-400',
+          iconBgColor: 'bg-red-500/10'
+        };
+      case 'expired':
+        return {
+          label: 'expired',
+          bgColor: 'bg-gray-500/20',
+          textColor: 'text-gray-400',
+          iconColor: 'text-gray-400',
+          iconBgColor: 'bg-gray-500/10'
+        };
+      default:
+        return {
+          label: invoice.status,
+          bgColor: 'bg-gray-500/20',
+          textColor: 'text-gray-400',
+          iconColor: 'text-gray-400',
+          iconBgColor: 'bg-gray-500/10'
+        };
+    }
+  };
+
+  // Helper function to get countdown for pending invoices
+  const getCountdown = (invoice: Invoice) => {
+    if (invoice.status !== 'pending' || !invoice.expiresAt) return null;
+    
+    const expiresAt = new Date(invoice.expiresAt).getTime();
+    const remainingMs = Math.max(0, expiresAt - currentTime);
+    
+    if (remainingMs <= 0) return 'Expired';
+    
+    const hours = Math.floor(remainingMs / (1000 * 60 * 60));
+    const minutes = Math.floor((remainingMs % (1000 * 60 * 60)) / (1000 * 60));
+    const seconds = Math.floor((remainingMs % (1000 * 60)) / 1000);
+    
+    if (hours > 0) {
+      return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    }
+    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+  };
 
   const statsData = [
     {
@@ -131,10 +225,10 @@ export function Dashboard({ onNavigate, invoices, stats }: DashboardProps) {
       <div className="relative z-10">
         {/* Header */}
         <div className="mb-8 lg:mb-12">
-          <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-2 font-title bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent">
+          <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold mb-2 font-title bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent">
             Dashboard
           </h1>
-          <p className="text-sm sm:text-base lg:text-lg text-foreground/60">Welcome back! Here's what's happening with your business.</p>
+          <p className="text-foreground/60 text-lg">Welcome back! Here's what's happening with your business.</p>
         </div>
 
         {/* Stats Overview */}
@@ -192,38 +286,42 @@ export function Dashboard({ onNavigate, invoices, stats }: DashboardProps) {
           <h2 className="text-xl font-semibold mb-6 font-title">Recent Activity</h2>
           {recentInvoices.length > 0 ? (
             <div className="space-y-4">
-              {recentInvoices.map((invoice) => (
-                <div key={invoice.id} className="flex items-center justify-between p-4 rounded-xl bg-white/5 border border-white/10">
-                  <div className="flex items-center gap-4">
-                    <div className={`p-2 rounded-lg ${
-                      invoice.status === 'paid' ? 'bg-green-500/10' : 
-                      invoice.status === 'pending' ? 'bg-yellow-500/10' : 
-                      'bg-red-500/10'
-                    }`}>
-                      <FileText className={`w-5 h-5 ${
-                        invoice.status === 'paid' ? 'text-green-400' : 
-                        invoice.status === 'pending' ? 'text-yellow-400' : 
-                        'text-red-400'
-                      }`} />
+              {recentInvoices.map((invoice) => {
+                const statusInfo = getStatusInfo(invoice);
+                const countdown = getCountdown(invoice);
+                const displayDate = invoice.paidAt || invoice.createdAt;
+                
+                return (
+                  <div key={invoice.id} className="flex items-center justify-between p-4 rounded-xl bg-white/5 border border-white/10">
+                    <div className="flex items-center gap-4">
+                      <div className={`p-2 rounded-lg ${statusInfo.iconBgColor}`}>
+                        <FileText className={`w-5 h-5 ${statusInfo.iconColor}`} />
+                      </div>
+                      <div>
+                        <p className="font-medium">{invoice.clientName}</p>
+                        <p className="text-sm text-white/50">
+                          {invoice.status === 'paid' ? 'Paid' : 'Created'} {new Date(displayDate).toLocaleDateString()}
+                        </p>
+                        {countdown && (
+                          <div className="flex items-center gap-1 mt-1">
+                            <Clock className="w-3 h-3 text-orange-400" />
+                            <span className="text-xs text-orange-400 font-mono">
+                              {countdown}
+                            </span>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                    <div>
-                      <p className="font-medium">{invoice.clientName}</p>
-                      <p className="text-sm text-white/50">{new Date(invoice.createdAt).toLocaleDateString()}</p>
+                    <div className="text-right">
+                      <p className="font-semibold">{invoice.amount.toFixed(8)} BTC</p>
+                      <p className="text-xs text-white/60">${invoice.musdAmount.toFixed(2)}</p>
+                      <span className={`text-xs px-2 py-1 rounded-full ${statusInfo.bgColor} ${statusInfo.textColor}`}>
+                        {statusInfo.label}
+                      </span>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <p className="font-semibold">{invoice.amount.toFixed(8)} BTC</p>
-                    <p className="text-xs text-white/60">${invoice.musdAmount.toFixed(2)}</p>
-                    <span className={`text-xs px-2 py-1 rounded-full ${
-                      invoice.status === 'paid' ? 'bg-green-500/20 text-green-400' :
-                      invoice.status === 'pending' ? 'bg-yellow-500/20 text-yellow-400' :
-                      'bg-red-500/20 text-red-400'
-                    }`}>
-                      {invoice.status}
-                    </span>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
               <div className="text-center pt-4">
                 <button
                   onClick={() => onNavigate('invoices')}

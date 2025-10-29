@@ -116,8 +116,14 @@ class TransactionStorageService {
 
   // Clear all transactions (for testing)
   clearAllTransactions(): void {
-    this.data = { transactions: [], lastUpdated: Date.now() };
-    this.saveToStorage();
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        localStorage.removeItem('boar_transactions');
+        console.log('✅ Cleared all transactions');
+      }
+    } catch (error) {
+      console.error('Failed to clear transactions:', error);
+    }
   }
 
   // Get storage statistics

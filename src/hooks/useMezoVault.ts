@@ -14,6 +14,7 @@ export const useMezoVault = () => {
   const { writeContract: borrowMUSDWrite, data: borrowHash } = useWriteContract();
   const { writeContract: repayMUSDWrite, data: repayHash } = useWriteContract();
   const { writeContract: withdrawCollateralWrite, data: withdrawHash } = useWriteContract();
+  const { writeContract: approveMUSDWrite, data: approvalHash } = useWriteContract();
 
   // Transaction confirmation hooks
   const { isLoading: isDepositConfirming, isSuccess: isDepositSuccess } = useWaitForTransactionReceipt({
@@ -27,6 +28,9 @@ export const useMezoVault = () => {
   });
   const { isLoading: isWithdrawConfirming, isSuccess: isWithdrawSuccess } = useWaitForTransactionReceipt({
     hash: withdrawHash,
+  });
+  const { isLoading: isApprovalConfirming, isSuccess: isApprovalSuccess } = useWaitForTransactionReceipt({
+    hash: approvalHash,
   });
 
   // Get native Bitcoin balance from wallet
@@ -81,6 +85,17 @@ export const useMezoVault = () => {
     },
   });
 
+  // Read MUSD allowance for vault contract
+  const { data: musdAllowance, refetch: refetchMusdAllowance } = useReadContract({
+    address: MEZO_CONTRACTS.MUSD_TOKEN as `0x${string}`,
+    abi: MUSD_ABI,
+    functionName: 'allowance',
+    args: address && isConnected ? [address, MEZO_CONTRACTS.MEZO_VAULT] : undefined,
+    query: {
+      enabled: !!address && isConnected,
+    },
+  });
+
 
   // Update vault data when contract data changes
   useEffect(() => {
@@ -110,6 +125,7 @@ export const useMezoVault = () => {
         refetchCollateralBalance(),
         refetchBorrowedAmount(),
         refetchCollateralRatio(),
+        refetchMusdAllowance(),
         // Note: Native balance will automatically refresh when wallet state changes
         // Contract balances will be added when we integrate with official Mezo system
       ]);
@@ -131,6 +147,11 @@ export const useMezoVault = () => {
       // Convert amount to wei
       const amountInWei = MezoUtils.parseAmount(amount);
       
+      // Validate amount
+      if (amountInWei === 0n) {
+        throw new MezoError('Amount must be greater than 0', MEZO_ERRORS.INVALID_AMOUNT);
+      }
+      
       // Call vault contract's depositCollateral function with ETH value
       depositCollateralWrite({
         address: MEZO_CONTRACTS.MEZO_VAULT as `0x${string}`,
@@ -141,7 +162,24 @@ export const useMezoVault = () => {
       });
 
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Deposit failed';
+      setIsLoading(false);
+      let errorMessage = 'Deposit failed';
+      
+      if (err instanceof MezoError) {
+        errorMessage = err.message;
+      } else if (err instanceof Error) {
+        // Parse common wallet errors
+        if (err.message.includes('User rejected')) {
+          errorMessage = 'Transaction cancelled by user';
+        } else if (err.message.includes('insufficient funds')) {
+          errorMessage = 'Insufficient BTC balance for deposit + gas';
+        } else if (err.message.includes('gas')) {
+          errorMessage = 'Transaction failed - try increasing gas limit';
+        } else {
+          errorMessage = err.message;
+        }
+      }
+      
       setError(errorMessage);
       throw new MezoError(errorMessage, MEZO_ERRORS.TRANSACTION_FAILED, err);
     }
@@ -160,6 +198,11 @@ export const useMezoVault = () => {
       // Convert amount to wei
       const amountInWei = MezoUtils.parseAmount(amount);
       
+      // Validate amount
+      if (amountInWei === 0n) {
+        throw new MezoError('Amount must be greater than 0', MEZO_ERRORS.INVALID_AMOUNT);
+      }
+      
       // Call vault contract's borrowMUSD function
       borrowMUSDWrite({
         address: MEZO_CONTRACTS.MEZO_VAULT as `0x${string}`,
@@ -169,7 +212,26 @@ export const useMezoVault = () => {
       });
       
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Borrow failed';
+      setIsLoading(false);
+      let errorMessage = 'Borrow failed';
+      
+      if (err instanceof MezoError) {
+        errorMessage = err.message;
+      } else if (err instanceof Error) {
+        // Parse common errors
+        if (err.message.includes('User rejected')) {
+          errorMessage = 'Transaction cancelled by user';
+        } else if (err.message.includes('Insufficient collateral')) {
+          errorMessage = 'Not enough collateral - deposit more BTC first';
+        } else if (err.message.includes('Vault does not exist')) {
+          errorMessage = 'Please deposit BTC first to create a vault';
+        } else if (err.message.includes('gas')) {
+          errorMessage = 'Transaction failed - try increasing gas limit';
+        } else {
+          errorMessage = err.message;
+        }
+      }
+      
       setError(errorMessage);
       throw new MezoError(errorMessage, MEZO_ERRORS.TRANSACTION_FAILED, err);
     }
@@ -182,12 +244,23 @@ export const useMezoVault = () => {
     }
 
     try {
-      const amountInWei = MezoUtils.parseAmount(amount);
-      // Approve vault to spend MUSD
-      // Note: This would need a separate write hook for approval
-      // For now, we'll handle it in the repay function
+      setIsLoading(true);
+      setError(null);
+
+      // Use infinite approval (MAX_UINT256) for better UX
+      const maxApproval = BigInt('0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff');
+      
+      // Call MUSD token's approve function
+      approveMUSDWrite({
+        address: MEZO_CONTRACTS.MUSD_TOKEN as `0x${string}`,
+        abi: MUSD_ABI,
+        functionName: 'approve',
+        args: [MEZO_CONTRACTS.MEZO_VAULT, maxApproval]
+      });
+
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Approve failed';
+      setError(errorMessage);
       throw new MezoError(errorMessage, MEZO_ERRORS.TRANSACTION_FAILED, err);
     }
   };
@@ -204,6 +277,15 @@ export const useMezoVault = () => {
 
       // Convert amount to wei
       const amountInWei = MezoUtils.parseAmount(amount);
+      
+      // Check if we have sufficient allowance
+      const currentAllowance = musdAllowance as bigint || 0n;
+      
+      if (currentAllowance < amountInWei) {
+        // Need to approve first
+        console.log('Insufficient allowance, requesting approval...');
+        throw new MezoError('APPROVAL_NEEDED', MEZO_ERRORS.TRANSACTION_FAILED);
+      }
       
       // Call vault contract's repayMUSD function
       repayMUSDWrite({
@@ -300,20 +382,20 @@ export const useMezoVault = () => {
 
   // Refetch data after successful transaction
   useEffect(() => {
-    if (isDepositSuccess || isBorrowSuccess || isRepaySuccess || isWithdrawSuccess) {
+    if (isDepositSuccess || isBorrowSuccess || isRepaySuccess || isWithdrawSuccess || isApprovalSuccess) {
       console.log('✅ Transaction successful, refetching data...');
       refetchAll();
       setIsLoading(false);
     }
-  }, [isDepositSuccess, isBorrowSuccess, isRepaySuccess, isWithdrawSuccess, refetchAll]);
+  }, [isDepositSuccess, isBorrowSuccess, isRepaySuccess, isWithdrawSuccess, isApprovalSuccess, refetchAll]);
 
   // Also refetch when transaction hash is available (pending state)
   useEffect(() => {
-    if (depositHash || borrowHash || repayHash || withdrawHash) {
+    if (depositHash || borrowHash || repayHash || withdrawHash || approvalHash) {
       console.log('📝 Transaction pending, refetching...');
       refetchAll();
     }
-  }, [depositHash, borrowHash, repayHash, withdrawHash, refetchAll]);
+  }, [depositHash, borrowHash, repayHash, withdrawHash, approvalHash, refetchAll]);
 
   // Format native BTC balance
   const walletBtcBalance = nativeBalance ? MezoUtils.formatAmount(nativeBalance.value) : '0';
@@ -330,7 +412,7 @@ export const useMezoVault = () => {
     healthFactor: vaultData?.healthFactor || 0,
     
     // State
-    isLoading: isLoading || isDepositConfirming || isBorrowConfirming || isRepayConfirming || isWithdrawConfirming,
+    isLoading: isLoading || isDepositConfirming || isBorrowConfirming || isRepayConfirming || isWithdrawConfirming || isApprovalConfirming,
     error,
     isConnected,
     
@@ -343,20 +425,25 @@ export const useMezoVault = () => {
     refetchAll,
     
     // Transaction status
-    isPending: isDepositConfirming || isBorrowConfirming || isRepayConfirming || isWithdrawConfirming,
-    isConfirming: isDepositConfirming || isBorrowConfirming || isRepayConfirming || isWithdrawConfirming,
-    isSuccess: isDepositSuccess || isBorrowSuccess || isRepaySuccess || isWithdrawSuccess,
-    transactionHash: depositHash || borrowHash || repayHash || withdrawHash || sendBitcoinHash,
+    isPending: isDepositConfirming || isBorrowConfirming || isRepayConfirming || isWithdrawConfirming || isApprovalConfirming,
+    isConfirming: isDepositConfirming || isBorrowConfirming || isRepayConfirming || isWithdrawConfirming || isApprovalConfirming,
+    isSuccess: isDepositSuccess || isBorrowSuccess || isRepaySuccess || isWithdrawSuccess || isApprovalSuccess,
+    transactionHash: depositHash || borrowHash || repayHash || withdrawHash || sendBitcoinHash || approvalHash,
     
     // Individual transaction statuses
     isDepositSuccess,
     isBorrowSuccess,
     isRepaySuccess,
     isWithdrawSuccess,
+    isApprovalSuccess,
     depositHash,
     borrowHash,
     repayHash,
     withdrawHash,
     sendBitcoinHash,
+    approvalHash,
+    
+    // Approval data
+    musdAllowance: musdAllowance ? MezoUtils.formatAmount(musdAllowance as bigint) : '0',
   };
 };

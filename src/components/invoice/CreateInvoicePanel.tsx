@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAccount } from 'wagmi';
-import { Send, Plus, X } from 'lucide-react';
-import toast from 'react-hot-toast';
+import { Send, Plus, X, Clock } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 import { InvoiceQRModal } from './InvoiceQRModal';
 import { useInvoiceContract } from '@/hooks/useInvoiceContract';
-import { parseEther } from 'viem';
+import { invoiceStorage } from '@/services/invoice-storage';
+import { boarRPC } from '@/services/boar-rpc';
 
 interface CreateInvoicePanelProps {
   onInvoiceCreated?: () => void;
@@ -13,7 +14,15 @@ interface CreateInvoicePanelProps {
 
 export function CreateInvoicePanel({ onInvoiceCreated }: CreateInvoicePanelProps = {}) {
   const { address, isConnected } = useAccount();
-  const { createInvoice: createBlockchainInvoice, isCreating } = useInvoiceContract();
+  const { createInvoice, isCreating, createTx } = useInvoiceContract();
+  const { toast } = useToast();
+  
+  // Track when we started creating to avoid infinite loops
+  const [hasStartedCreation, setHasStartedCreation] = useState(false);
+  // Track if transaction actually started on blockchain
+  const [txStarted, setTxStarted] = useState(false);
+  // Track creation start time for timer
+  const [creationStartTime, setCreationStartTime] = useState<number | null>(null);
   
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [clientName, setClientName] = useState('');
@@ -21,7 +30,8 @@ export function CreateInvoicePanel({ onInvoiceCreated }: CreateInvoicePanelProps
   const [clientCode, setClientCode] = useState('');
   const [usdAmount, setUsdAmount] = useState('');
   const [btcInput, setBtcInput] = useState('');
-  const [bitcoinAddress, setBitcoinAddress] = useState('');
+  const [bitcoinAddress, setBitcoinAddress] = useState(address || '');
+  const [payToAddress, setPayToAddress] = useState(address || ''); // Separate field for payment address
   const [showQRModal, setShowQRModal] = useState(false);
   const [createdInvoice, setCreatedInvoice] = useState<any>(null);
   const [bitcoinPrice, setBitcoinPrice] = useState<number>(0);
@@ -82,6 +92,14 @@ export function CreateInvoicePanel({ onInvoiceCreated }: CreateInvoicePanelProps
     }
   }, [clientName]);
 
+  // Auto-detect connected wallet address for payment
+  useEffect(() => {
+    if (address && !bitcoinAddress) {
+      setBitcoinAddress(address);
+      setPayToAddress(address);
+    }
+  }, [address, bitcoinAddress]);
+
   // Calculate Bitcoin equivalent from USD input using real-time Bitcoin price
   const getBitcoinAmount = () => {
     if (!usdAmount || !bitcoinPrice) return 0;
@@ -120,27 +138,47 @@ export function CreateInvoicePanel({ onInvoiceCreated }: CreateInvoicePanelProps
 
   const handleSendInvoice = async () => {
     if (!isConnected) {
-      toast.error('Please connect your wallet');
+      toast({
+        title: "Wallet Not Connected",
+        description: "Please connect your wallet",
+        variant: "destructive",
+      });
       return;
     }
 
     if (!clientName.trim() || !details.trim()) {
-      toast.error('Please fill in all required fields');
+      toast({
+        title: "Missing Information",
+        description: "Please fill in all required fields",
+        variant: "destructive",
+      });
       return;
     }
 
     if ((inputCurrency === 'USD' && !usdAmount.trim()) || (inputCurrency === 'BTC' && !btcInput.trim())) {
-      toast.error('Please enter an amount');
+      toast({
+        title: "Missing Amount",
+        description: "Please enter an amount",
+        variant: "destructive",
+      });
       return;
     }
 
-    if (!bitcoinAddress.trim()) {
-      toast.error('Please enter a Mezo testnet address');
+    if (!payToAddress.trim()) {
+      toast({
+        title: "Missing Payment Address",
+        description: "Please enter a payment address",
+        variant: "destructive",
+      });
       return;
     }
 
-    if (!isValidMezoAddress(bitcoinAddress)) {
-      toast.error('Please enter a valid Mezo testnet address (0x...)');
+    if (!isValidMezoAddress(payToAddress)) {
+      toast({
+        title: "Invalid Address",
+        description: "Please enter a valid Mezo testnet address (0x...)",
+        variant: "destructive",
+      });
       return;
     }
 
@@ -150,44 +188,139 @@ export function CreateInvoicePanel({ onInvoiceCreated }: CreateInvoicePanelProps
       : parseFloat(btcInput);
     
     if (isNaN(finalBitcoinAmount) || finalBitcoinAmount <= 0) {
-      toast.error('Please enter a valid amount');
+      toast({
+        title: "Invalid Amount",
+        description: "Please enter a valid amount",
+        variant: "destructive",
+      });
       return;
     }
     
     try {
-      // Convert BTC to wei for smart contract
-      const amountInWei = parseEther(finalBitcoinAmount.toString());
-      
-      // Generate client code
-      const clientCode = `CLT-${clientName.substring(0, 3).toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`;
-      
-      // Call smart contract
-      await createBlockchainInvoice({
+      // Begin creation
+      setHasStartedCreation(true);
+
+      console.log('🚀 Starting invoice creation with data:', {
         clientName,
         details,
         amount: finalBitcoinAmount.toString(),
         currency: 'USD',
         bitcoinAddress,
+        payToAddress,
       });
 
-      // Reset form
+      // Get balance snapshot for the payment address (optional)
+      let balanceAtCreation = '0';
+      try {
+        console.log('🔍 Fetching balance for address:', payToAddress);
+        if (!payToAddress || payToAddress.length < 10) {
+          throw new Error('Invalid payment address');
+        }
+        const balance = await boarRPC.getAddressBalance(payToAddress);
+        balanceAtCreation = balance.balance;
+        console.log('💰 Balance snapshot at creation:', balanceAtCreation);
+      } catch (error) {
+        console.warn('⚠️ Could not get balance snapshot:', error);
+        // Continue without balance snapshot - not critical for invoice creation
+        balanceAtCreation = '0';
+      }
+
+      // Use the hook's createInvoice function to avoid duplicates
+      const invoiceData = {
+        clientName,
+        details,
+        amount: finalBitcoinAmount.toString(),
+        currency: 'USD',
+        bitcoinAddress: payToAddress, // Use payToAddress as the payment address
+        balanceAtCreation, // Include balance snapshot for payment verification
+      };
+
+      console.log('📝 Creating invoice via hook:', invoiceData);
+      
+      // This will handle both localStorage and blockchain submission
+      await createInvoice(invoiceData);
+
+      // Close modal and reset form
+      setIsDropdownOpen(false);
       setClientName('');
       setDetails('');
       setUsdAmount('');
       setBtcInput('');
       setClientCode('');
-      setBitcoinAddress('');
       setInputCurrency('USD');
-      setIsDropdownOpen(false);
+      setHasStartedCreation(false);
+      setTxStarted(false);
+      setCreationStartTime(null);
       
-      // Notify parent
+      // Notify parent to refresh data
+      console.log('📞 Calling onInvoiceCreated callback');
       onInvoiceCreated?.();
       
     } catch (error) {
-      console.error('Error creating invoice:', error);
-      toast.error('Failed to create invoice. Please try again.');
+      console.error('❌ Error creating invoice:', error);
+      toast({
+        title: "Creation Failed",
+        description: `Failed to create invoice: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        variant: "destructive",
+      });
+      setHasStartedCreation(false);
     }
   };
+
+  // Track when transaction actually starts (when isCreating becomes true)
+  useEffect(() => {
+    if (isCreating && hasStartedCreation && !creationStartTime) {
+      setTxStarted(true);
+      setCreationStartTime(Date.now());
+    }
+  }, [isCreating, hasStartedCreation, creationStartTime]);
+
+  // Calculate time remaining for display
+  const getCountdownText = () => {
+    if (!creationStartTime) return '';
+    const elapsed = Date.now() - creationStartTime;
+    const remaining = Math.max(0, 180000 - elapsed); // 3 minutes timeout
+    const minutes = Math.floor(remaining / 60000);
+    const seconds = Math.floor((remaining % 60000) / 1000);
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  };
+  
+  // Handle successful transaction completion
+  useEffect(() => {
+    // Check if transaction completed successfully
+    const isSuccess = (txStarted && !isCreating && hasStartedCreation) || 
+                      (createTx.status === 'success' && hasStartedCreation && txStarted);
+    
+    if (isSuccess) {
+      console.log('✅ Invoice created successfully!');
+      toast.success('Invoice created successfully!');
+      
+      // Close modal and reset everything
+      setIsDropdownOpen(false);
+      setClientName('');
+      setDetails('');
+      setUsdAmount('');
+      setBtcInput('');
+      setClientCode('');
+      setInputCurrency('USD');
+      setHasStartedCreation(false);
+      setTxStarted(false);
+      setCreationStartTime(null);
+      
+      // Notify parent to refresh data
+      onInvoiceCreated?.();
+    }
+  }, [isCreating, createTx.status, hasStartedCreation, txStarted, onInvoiceCreated]);
+  
+  // Handle errors
+  useEffect(() => {
+    if (hasStartedCreation && !isCreating && createTx.status === 'error') {
+      // Transaction failed - keep modal open but reset the flag so they can retry
+      setHasStartedCreation(false);
+      setTxStarted(false);
+      toast.error('Transaction failed. Please try again.');
+    }
+  }, [createTx.status, hasStartedCreation, isCreating]);
 
   return (
     <div className="relative" ref={dropdownRef}>
@@ -197,7 +330,7 @@ export function CreateInvoicePanel({ onInvoiceCreated }: CreateInvoicePanelProps
         className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-medium transition-all duration-200 shadow-lg hover:shadow-xl text-sm"
       >
         <Plus className="w-4 h-4" />
-        <span>Create Invoice</span>
+        <span>Generate Invoice</span>
       </button>
 
       {/* Modal Overlay */}
@@ -211,9 +344,20 @@ export function CreateInvoicePanel({ onInvoiceCreated }: CreateInvoicePanelProps
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-semibold text-white">Create New Invoice</h3>
+              <h3 className="text-lg font-semibold text-white">Generate Invoice</h3>
               <button
-                onClick={() => setIsDropdownOpen(false)}
+                onClick={() => {
+                  setIsDropdownOpen(false);
+                  setHasStartedCreation(false);
+                  setTxStarted(false);
+                  setClientName('');
+                  setDetails('');
+                  setUsdAmount('');
+                  setBtcInput('');
+                  setClientCode('');
+                  // Don't reset bitcoinAddress - keep it as connected wallet
+                  setInputCurrency('USD');
+                }}
                 className="text-white/60 hover:text-white transition-colors"
               >
                 <X className="w-5 h-5" />
@@ -330,7 +474,7 @@ export function CreateInvoicePanel({ onInvoiceCreated }: CreateInvoicePanelProps
                         </>
                       )}
                     </p>
-                    <p className="text-xs text-white/60 mt-1">
+                    <div className="text-xs text-white/60 mt-1">
                       {isLoadingPrice ? (
                         <span className="flex items-center gap-1">
                           <div className="w-3 h-3 border border-orange-400 border-t-transparent rounded-full animate-spin"></div>
@@ -339,44 +483,63 @@ export function CreateInvoicePanel({ onInvoiceCreated }: CreateInvoicePanelProps
                       ) : (
                         `Current Bitcoin price: $${bitcoinPrice.toLocaleString()}`
                       )}
-                    </p>
+                    </div>
                   </div>
                 )}
               </div>
 
-              {/* Mezo Testnet Address */}
+              {/* Payment Address (Auto-detected) */}
               <div>
                 <label className="block text-sm font-medium text-white/80 mb-2">
-                  Mezo Testnet Address *
+                  Payment Address (Auto-detected) *
                 </label>
                 <input
                   type="text"
                   value={bitcoinAddress}
-                  onChange={(e) => setBitcoinAddress(e.target.value)}
-                  className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent"
-                  placeholder="0x1234567890123456789012345678901234567890"
+                  readOnly
+                  className="w-full px-4 py-3 bg-white/5 border border-white/20 rounded-xl text-white/70 cursor-not-allowed"
+                  placeholder="Connect wallet to auto-detect address"
                 />
                 <p className="text-xs text-white/60 mt-1">
-                  Enter your Mezo testnet address to receive Bitcoin payments
+                  Payments will be sent to your connected wallet address
+                </p>
+              </div>
+
+              {/* Pay To Address (Editable) */}
+              <div>
+                <label className="block text-sm font-medium text-white/80 mb-2">
+                  Pay To Address *
+                </label>
+                <input
+                  type="text"
+                  value={payToAddress}
+                  onChange={(e) => setPayToAddress(e.target.value)}
+                  className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent"
+                  placeholder="Enter payment address (0x...)"
+                />
+                <p className="text-xs text-white/60 mt-1">
+                  Address where payments should be sent (can be different from your wallet)
                 </p>
               </div>
 
 
+              {/* Transaction Status (hidden to avoid blocking UX) */}
+
               {/* Send Button */}
               <button
                 onClick={handleSendInvoice}
-                disabled={isCreating}
+                disabled={isCreating || createTx.status === 'pending'}
                 className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 disabled:from-gray-500 disabled:to-gray-600 text-white font-medium rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl disabled:cursor-not-allowed"
               >
                 {isCreating ? (
                   <>
                     <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    <span>Creating Invoice...</span>
+                    <span>Confirming Transaction...</span>
                   </>
                 ) : (
                   <>
                     <Send className="w-5 h-5" />
-                    <span>Create Invoice</span>
+                    <span>Generate Invoice</span>
                   </>
                 )}
               </button>

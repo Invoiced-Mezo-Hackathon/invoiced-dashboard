@@ -11,9 +11,6 @@ import "@openzeppelin/contracts/access/Ownable.sol";
  * WARNING: This is for DEMO purposes only. Real Mezo uses official MUSD token.
  */
 contract MUSDToken is ERC20, Ownable {
-    // Minimum amount to prevent dust
-    uint256 public constant MIN_AMOUNT = 1000;
-    
     // Addresses that can mint/burn tokens
     mapping(address => bool) public minters;
     
@@ -49,7 +46,7 @@ contract MUSDToken is ERC20, Ownable {
      */
     function mint(address to, uint256 amount) external {
         require(minters[msg.sender], "MUSDToken: not a minter");
-        require(amount >= MIN_AMOUNT, "MUSDToken: amount too small");
+        require(amount > 0, "MUSDToken: amount must be greater than 0");
         
         _mint(to, amount);
     }
@@ -61,7 +58,7 @@ contract MUSDToken is ERC20, Ownable {
      */
     function burn(address from, uint256 amount) external {
         require(minters[msg.sender], "MUSDToken: not a minter");
-        require(amount >= MIN_AMOUNT, "MUSDToken: amount too small");
+        require(amount > 0, "MUSDToken: amount must be greater than 0");
         
         _burn(from, amount);
     }
