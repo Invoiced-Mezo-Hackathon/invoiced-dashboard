@@ -101,7 +101,7 @@ export function Payments({ invoices }: PaymentsProps) {
       </div>
 
       {/* Payment Summary */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
         <div className="bg-green-500/20 backdrop-blur-xl border border-green-400/30 rounded-2xl p-4 hover:border-green-400/50 transition-all">
           <div className="flex items-center gap-3 mb-3">
             <div className="w-10 h-10 rounded-lg border border-green-400/30 flex items-center justify-center">
@@ -116,24 +116,10 @@ export function Payments({ invoices }: PaymentsProps) {
           </div>
         </div>
 
-        <div className="bg-blue-500/20 backdrop-blur-xl border border-blue-400/30 rounded-2xl p-4 hover:border-blue-400/50 transition-all">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-10 h-10 rounded-lg border border-blue-400/30 flex items-center justify-center">
-              <BarChart3 className="w-5 h-5 text-white" />
-            </div>
-            <span className="text-xs font-navbar font-medium text-blue-400">+12.5%</span>
-          </div>
-          <div>
-            <p className="text-xl font-bold font-navbar mb-1"><span className="text-green-400">{totalReceived.toFixed(8)}</span> BTC</p>
-            <p className="text-xs font-navbar text-white/60">Net Balance</p>
-            <p className="text-xs font-navbar text-white/50">$<span className="text-green-400">{(totalReceived * bitcoinPrice).toFixed(2)}</span> USD</p>
-          </div>
-        </div>
-
         <div className="bg-purple-500/20 backdrop-blur-xl border border-purple-400/30 rounded-2xl p-4 hover:border-purple-400/50 transition-all">
           <div className="flex items-center gap-3 mb-3">
             <div className="w-10 h-10 rounded-lg border border-purple-400/30 flex items-center justify-center">
-              <ArrowDownLeft className="w-5 h-5 text-white" />
+              <BarChart3 className="w-5 h-5 text-white" />
             </div>
             <span className="text-xs font-navbar font-medium text-purple-400">+{paymentHistory.length}</span>
           </div>
