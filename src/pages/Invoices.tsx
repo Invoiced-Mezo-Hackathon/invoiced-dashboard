@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, CheckCircle, XCircle, QrCode, Eye, ExternalLink, Clock } from 'lucide-react';
+import { X, CheckCircle, XCircle, QrCode, Eye, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { InvoiceQRModal } from '@/components/invoice/InvoiceQRModal';
@@ -7,6 +7,8 @@ import { CreateInvoicePanel } from '@/components/invoice/CreateInvoicePanel';
 import { useInvoicePaymentMonitor } from '@/hooks/usePaymentMonitor';
 import { TransactionDetailsModal } from '@/components/TransactionDetailsModal';
 import { useInvoiceContract } from '@/hooks/useInvoiceContract';
+import { useCountdown } from '@/hooks/useCountdown';
+import { Invoice as InvoiceType } from '@/types/invoice';
 
 interface Invoice {
   id: string;
@@ -16,18 +18,19 @@ interface Invoice {
   amount: number;
   currency: string;
   musdAmount: number;
-  status: 'pending' | 'paid' | 'cancelled';
+  status: 'pending' | 'paid' | 'cancelled' | 'draft' | 'expired';
   createdAt: string;
   wallet: string;
   bitcoinAddress?: string;
+  expiresAt?: string;
 }
 
 interface InvoicesProps {
-  invoices: Invoice[];
+  invoices: InvoiceType[];
 }
 
 export function Invoices({ invoices }: InvoicesProps) {
-  const { confirmPayment, cancelInvoice, refreshData, createInvoice } = useInvoiceContract();
+  const { confirmPayment, cancelInvoice, refreshData } = useInvoiceContract();
   
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [showQRModal, setShowQRModal] = useState(false);
@@ -65,11 +68,10 @@ export function Invoices({ invoices }: InvoicesProps) {
     setShowQRModal(true);
   };
 
-  const handleShowTransaction = (invoice: Invoice, e: React.MouseEvent) => {
+  const handleShowTransaction = (invoice: InvoiceType, e: React.MouseEvent) => {
     e.stopPropagation();
     // Get transaction details for this invoice
-    const { getTransactionsForInvoice } = useInvoicePaymentMonitor();
-    const transactions = getTransactionsForInvoice(invoice.id);
+    const { transactions } = useInvoicePaymentMonitor(invoice.id, invoice.bitcoinAddress || '');
     if (transactions.length > 0) {
       setSelectedTransaction(transactions[0]);
       setShowTransactionModal(true);
@@ -180,6 +182,10 @@ export function Invoices({ invoices }: InvoicesProps) {
               <div className="text-right">
                 <p className="text-xs font-navbar text-white/50 mb-1">Created</p>
                 <p className="text-sm font-navbar text-white/70">{new Date(invoice.createdAt).toLocaleDateString()}</p>
+                {/* Timer for pending invoices */}
+                {invoice.status === 'pending' && invoice.expiresAt && (
+                  <InvoiceTimer expiresAt={invoice.expiresAt} />
+                )}
               </div>
             </div>
 
@@ -369,7 +375,7 @@ export function Invoices({ invoices }: InvoicesProps) {
 
       {/* QR Modal */}
       <InvoiceQRModal 
-        invoice={qrInvoice}
+        invoice={qrInvoice as InvoiceType}
         isOpen={showQRModal}
         onClose={() => setShowQRModal(false)}
       />
@@ -380,6 +386,23 @@ export function Invoices({ invoices }: InvoicesProps) {
         onClose={() => setShowTransactionModal(false)}
         transaction={selectedTransaction}
       />
+    </div>
+  );
+}
+
+// Timer component for invoice expiry
+function InvoiceTimer({ expiresAt }: { expiresAt: string }) {
+  const { label, isExpired } = useCountdown(expiresAt);
+  
+  return (
+    <div className="mt-2 flex items-center gap-1">
+      <Clock className="w-3 h-3 text-yellow-400" />
+      <span className={cn(
+        "text-xs font-navbar font-medium",
+        isExpired ? "text-red-400" : "text-yellow-400"
+      )}>
+        {isExpired ? 'Expired' : label}
+      </span>
     </div>
   );
 }
