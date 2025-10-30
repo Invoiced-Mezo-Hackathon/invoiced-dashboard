@@ -338,8 +338,8 @@ export function CreateInvoicePanel({ onInvoiceCreated }: CreateInvoicePanelProps
                     </p>
                     <p className="text-xs text-white/60 mt-1 font-navbar">
                       {isLoadingPrice ? (
-                    <span className="flex items-center gap-1">
-                          <span className="w-3 h-3 border border-green-400 border-t-transparent rounded-full animate-spin inline-block"></span>
+                        <span className="flex items-center gap-1">
+                          <div className="w-3 h-3 border border-green-400 border-t-transparent rounded-full animate-spin"></div>
                           Loading Bitcoin price...
                         </span>
                       ) : (
@@ -353,7 +353,7 @@ export function CreateInvoicePanel({ onInvoiceCreated }: CreateInvoicePanelProps
               {/* Wallet Address */}
               <div>
                 <label className="block text-sm font-medium text-white/80 mb-2 font-navbar">
-                  Wallet Address *
+                  Mezo Testnet Address *
                 </label>
                 <input
                   type="text"
@@ -364,7 +364,7 @@ export function CreateInvoicePanel({ onInvoiceCreated }: CreateInvoicePanelProps
                   readOnly={!!address}
                 />
                 <p className="text-xs text-white/60 mt-1 font-navbar">
-                  {address ? 'Auto detected' : 'Enter wallet address to receive payments'}
+                  Enter your Mezo testnet address to receive Bitcoin payments
                 </p>
               </div>
 
