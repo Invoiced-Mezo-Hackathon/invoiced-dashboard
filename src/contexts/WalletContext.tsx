@@ -14,7 +14,7 @@ const WalletContext = createContext<WalletContextType | undefined>(undefined)
 
 export function WalletProvider({ children }: { children: ReactNode }) {
   const { address, isConnected } = useAccount()
-  const { connect, connectors, isLoading } = useConnect()
+  const { connect, connectors, isPending } = useConnect()
   const { disconnect } = useDisconnect()
 
   const handleConnect = () => {
@@ -29,7 +29,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         address,
         isConnected,
         balance: undefined, // You can add balance fetching logic here
-        isLoading,
+        isLoading: isPending,
         connect: handleConnect,
         disconnect,
       }}
@@ -39,6 +39,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   )
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useWallet() {
   const context = useContext(WalletContext)
   if (context === undefined) {

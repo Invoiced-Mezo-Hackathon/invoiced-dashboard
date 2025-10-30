@@ -13,6 +13,12 @@ export interface BlockchainInvoice {
   cancelled: boolean;
   createdAt: number; // Unix timestamp
   paidAt: number; // Unix timestamp
+  expiresAt: number; // Unix timestamp
+  payToAddress: string; // Actual payment destination address
+  paymentTxHash: string; // Bitcoin transaction hash
+  observedInboundAmount: string; // Actual amount received
+  currency: string; // Invoice currency (USD/KES/BTC)
+  balanceAtCreation: string; // Balance snapshot for verification
 }
 
 export interface Invoice {
@@ -23,15 +29,20 @@ export interface Invoice {
   amount: number;
   currency: 'USD' | 'KES';
   musdAmount: number;
-  status: 'pending' | 'paid' | 'cancelled';
+  status: 'draft' | 'pending' | 'paid' | 'expired' | 'cancelled';
   createdAt: string; // ISO string
+  expiresAt: string; // ISO string (createdAt + 1 hour)
   wallet: string; // Bitcoin address
   bitcoinAddress: string; // Same as wallet, for clarity
+  payToAddress: string; // Address provided in invoice form for payment
   creator: string; // Ethereum address
   recipient: string; // Ethereum address
   paidAt?: string; // ISO string, only if paid
   txHash?: string; // Transaction hash for creation
   paymentTxHash?: string; // Transaction hash for payment confirmation
+  requestedAmount: string; // Amount in wei (10^18 base unit), stored as string
+  observedInboundAmount?: string; // Actual amount received
+  balanceAtCreation?: string; // Snapshot from Boar at creation time
 }
 
 export interface InvoiceFormData {
@@ -40,6 +51,8 @@ export interface InvoiceFormData {
   amount: string;
   currency: 'USD' | 'KES';
   bitcoinAddress: string;
+  payToAddress: string; // Address for payment
+  balanceAtCreation?: string; // Balance snapshot at creation time
 }
 
 export interface InvoiceStats {
@@ -86,6 +99,9 @@ export interface InvoiceCreatedEvent {
   amount: string;
   bitcoinAddress: string;
   clientName: string;
+  payToAddress: string;
+  currency: string;
+  expiresAt: number;
   txHash: string;
   blockNumber: number;
 }
@@ -94,6 +110,8 @@ export interface InvoicePaidEvent {
   id: number;
   amount: string;
   timestamp: number;
+  paymentTxHash: string;
+  observedInboundAmount: string;
   txHash: string;
   blockNumber: number;
 }
@@ -106,7 +124,7 @@ export interface InvoiceCancelledEvent {
 }
 
 // Utility types
-export type InvoiceStatus = 'pending' | 'paid' | 'cancelled';
+export type InvoiceStatus = 'draft' | 'pending' | 'paid' | 'expired' | 'cancelled';
 
 export interface InvoiceFilters {
   status?: InvoiceStatus;
@@ -139,6 +157,7 @@ export interface UseInvoiceContractReturn {
   createInvoice: (data: InvoiceFormData) => Promise<void>;
   confirmPayment: (invoiceId: string) => Promise<void>;
   cancelInvoice: (invoiceId: string) => Promise<void>;
+  approveInvoice: (invoiceId: string) => Promise<void>;
   refreshData: () => Promise<void>;
   
   // Error handling

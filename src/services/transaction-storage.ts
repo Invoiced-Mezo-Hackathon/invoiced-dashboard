@@ -20,7 +20,8 @@ export interface TransactionStorage {
 }
 
 class TransactionStorageService {
-  private storageFile = 'transactions.json';
+  // kept for future file-based persistence (unused in browser env)
+  // private _storageFile = 'transactions.json';
   private data: TransactionStorage = {
     transactions: [],
     lastUpdated: Date.now(),
@@ -69,6 +70,11 @@ class TransactionStorageService {
       this.data.transactions.push(newTransaction);
       this.data.lastUpdated = Date.now();
       this.saveToStorage();
+      try {
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('transactions_updated'));
+        }
+      } catch {}
     }
   }
 
@@ -95,6 +101,11 @@ class TransactionStorageService {
       transaction.status = confirmations >= 1 ? 'confirmed' : 'pending';
       this.data.lastUpdated = Date.now();
       this.saveToStorage();
+      try {
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('transactions_updated'));
+        }
+      } catch {}
     }
   }
 
@@ -105,6 +116,11 @@ class TransactionStorageService {
       transaction.status = status;
       this.data.lastUpdated = Date.now();
       this.saveToStorage();
+      try {
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('transactions_updated'));
+        }
+      } catch {}
     }
   }
 
@@ -116,8 +132,14 @@ class TransactionStorageService {
 
   // Clear all transactions (for testing)
   clearAllTransactions(): void {
-    this.data = { transactions: [], lastUpdated: Date.now() };
-    this.saveToStorage();
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        localStorage.removeItem('boar_transactions');
+        console.log('✅ Cleared all transactions');
+      }
+    } catch (error) {
+      console.error('Failed to clear transactions:', error);
+    }
   }
 
   // Get storage statistics

@@ -1,4 +1,5 @@
 import { ethers } from "ethers";
+import * as fs from "fs";
 
 async function main() {
   console.log("🚀 Deploying InvoiceContract to Mezo Testnet...");
@@ -21,7 +22,6 @@ async function main() {
   }
 
   // Read and compile contract
-  const fs = require("fs");
   const contractPath = "artifacts/contracts/InvoiceContract.sol/InvoiceContract.json";
   const contractJson = JSON.parse(fs.readFileSync(contractPath, "utf8"));
   

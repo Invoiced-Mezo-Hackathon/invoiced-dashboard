@@ -9,6 +9,14 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, './src'),
     },
+    dedupe: [
+      'react',
+      'react-dom',
+      'wagmi',
+      '@tanstack/react-query',
+      '@rainbow-me/rainbowkit',
+      'viem'
+    ],
   },
   server: {
     port: 3000,
@@ -29,8 +37,6 @@ export default defineConfig({
   },
   optimizeDeps: {
     include: [
-      'sats-connect', 
-      '@mezo-org/passport',
       '@rainbow-me/rainbowkit',
       'wagmi',
       'viem'

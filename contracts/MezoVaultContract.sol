@@ -49,6 +49,7 @@ contract MezoVaultContract is ReentrancyGuard, Ownable {
     event MUSDBorrowed(address indexed user, uint256 amount);
     event MUSDRepaid(address indexed user, uint256 amount);
     event CollateralWithdrawn(address indexed user, uint256 amount);
+    // Send functionality removed for focused vault
     event VaultLiquidated(address indexed user, uint256 collateralAmount, uint256 debtAmount);
     
     constructor(address _musdToken) Ownable(msg.sender) {
@@ -97,15 +98,23 @@ contract MezoVaultContract is ReentrancyGuard, Ownable {
         vault.borrowedAmount = newBorrowedAmount;
         totalBorrowed += amount;
         
-        // Mint MUSD and send to user
-        IMUSDToken(musdToken).mint(msg.sender, amount);
+        // Mint MUSD and send to user - ensure minting succeeds
+        try IMUSDToken(musdToken).mint(msg.sender, amount) {
+            // Mint successful
+        } catch Error(string memory reason) {
+            revert(string(abi.encodePacked("Minting failed: ", reason)));
+        } catch {
+            revert("Minting failed: Unknown error");
+        }
         
         emit MUSDBorrowed(msg.sender, amount);
     }
     
     /**
-     * @dev Repay MUSD debt
+     * @dev Repay MUSD debt (partial or full repayment supported)
      * @param amount Amount of MUSD to repay (in wei)
+     * @notice Partial repayment is allowed. If amount > debt, only the debt amount is repaid.
+     *         If amount < debt, the exact amount specified is repaid and remaining debt continues to accrue interest.
      */
     function repayMUSD(uint256 amount) external nonReentrant {
         require(amount > 0, "Amount must be greater than 0");
@@ -139,17 +148,17 @@ contract MezoVaultContract is ReentrancyGuard, Ownable {
         
         _updateInterest(msg.sender);
         
-        uint256 newCollateralAmount = vault.collateralAmount - amount;
-        require(newCollateralAmount >= 0, "Amount exceeds collateral");
+        // Verify sufficient collateral
+        require(vault.collateralAmount >= amount, "Insufficient collateral");
         
-        // Check if withdrawal maintains healthy collateral ratio
+        // If there is outstanding debt, only allow withdrawal that maintains collateral ratio
         if (vault.borrowedAmount > 0) {
-            require(_isHealthyCollateralRatio(newCollateralAmount, vault.borrowedAmount), "Insufficient collateral ratio");
-        } else {
-            // If no debt, can withdraw all (but check for underflow)
-            require(vault.collateralAmount >= amount, "Insufficient collateral");
+            // After withdrawal, ensure health is maintained
+            uint256 remainingCollateral = vault.collateralAmount - amount;
+            require(_isHealthyCollateralRatio(remainingCollateral, vault.borrowedAmount), "Insufficient collateral ratio after withdrawal");
         }
-        
+
+        uint256 newCollateralAmount = vault.collateralAmount - amount;
         vault.collateralAmount = newCollateralAmount;
         totalCollateral -= amount;
         
@@ -158,6 +167,37 @@ contract MezoVaultContract is ReentrancyGuard, Ownable {
         
         emit CollateralWithdrawn(msg.sender, amount);
     }
+
+    /**
+     * @dev Compute maximum BTC withdrawable while staying above the minimum collateral ratio
+     * @param user User address
+     * @return Amount of BTC (in wei) that can be withdrawn right now
+     */
+    function getMaxWithdrawable(address user) external view returns (uint256) {
+        Vault memory vault = vaults[user];
+        if (!vault.exists || vault.collateralAmount == 0) {
+            return 0;
+        }
+
+        // If no debt, full collateral is withdrawable
+        if (vault.borrowedAmount == 0) {
+            return vault.collateralAmount;
+        }
+
+        // Calculate the minimum collateral required to maintain MIN_COLLATERAL_RATIO after withdrawal
+        // Condition: (remainingCollateral * BTC_PRICE_USD * 10000) / borrowedAmount >= MIN_COLLATERAL_RATIO
+        // → remainingCollateral >= (MIN_COLLATERAL_RATIO * borrowedAmount) / (BTC_PRICE_USD * 10000)
+        uint256 requiredCollateral = (MIN_COLLATERAL_RATIO * vault.borrowedAmount) / (BTC_PRICE_USD * 10000);
+
+        if (vault.collateralAmount <= requiredCollateral) {
+            return 0;
+        }
+
+        uint256 maxWithdraw = vault.collateralAmount - requiredCollateral;
+        return maxWithdraw;
+    }
+    
+    // sendCollateral removed
     
     /**
      * @dev Get user's collateral ratio
@@ -168,10 +208,10 @@ contract MezoVaultContract is ReentrancyGuard, Ownable {
         Vault memory vault = vaults[user];
         if (vault.borrowedAmount == 0) return 0;
         
-        // Convert collateral to USD value (assuming 1 wei = 1 gwei for price calculation)
-        // We need to scale the price calculation properly
-        // collateralAmount is in wei, we need to calculate: (BTC * BTC_PRICE) / MUSD
-        uint256 collateralValue = (vault.collateralAmount * BTC_PRICE_USD) / 1e18;
+        // Convert collateral to USD value (both in same units)
+        // collateralAmount is in wei, BTC_PRICE_USD is in USD
+        // collateralValue = collateralAmount * BTC_PRICE_USD (in wei*USD units)
+        uint256 collateralValue = vault.collateralAmount * BTC_PRICE_USD;
         return (collateralValue * 10000) / vault.borrowedAmount;
     }
     
@@ -205,6 +245,21 @@ contract MezoVaultContract is ReentrancyGuard, Ownable {
     }
     
     /**
+     * @dev Get user's current debt including accrued interest (read-only)
+     * @param user User address
+     * @return Current debt in wei (borrowed + accrued interest since last update)
+     */
+    function getCurrentDebt(address user) external view returns (uint256) {
+        Vault memory vault = vaults[user];
+        if (!vault.exists || vault.borrowedAmount == 0) {
+            return 0;
+        }
+        uint256 timeElapsed = block.timestamp - vault.lastUpdateTime;
+        uint256 interest = (vault.borrowedAmount * INTEREST_RATE * timeElapsed) / (365 days * 10000);
+        return vault.borrowedAmount + interest;
+    }
+    
+    /**
      * @dev Get current interest rate
      * @return Interest rate in basis points
      */
@@ -234,8 +289,14 @@ contract MezoVaultContract is ReentrancyGuard, Ownable {
     function _isHealthyCollateralRatio(uint256 collateralAmount, uint256 borrowedAmount) internal view returns (bool) {
         if (borrowedAmount == 0) return true;
         
-        // Convert collateral to USD value
-        uint256 collateralValue = (collateralAmount * BTC_PRICE_USD) / 1e18;
+        // Convert collateral to USD value (both in same units: wei * USD)
+        // collateralAmount is in wei (1 BTC = 1e18 wei)
+        // BTC_PRICE_USD is in USD (50000 = $50,000)
+        // collateralValue = collateralAmount (wei) * BTC_PRICE_USD (USD) = value in wei*USD units
+        // borrowedAmount is in wei (MUSD uses 18 decimals)
+        // To compare, we need: (collateralValue * 10000) / borrowedAmount >= MIN_COLLATERAL_RATIO
+        // Simplified: (collateralAmount * BTC_PRICE_USD * 10000) / borrowedAmount >= 110
+        uint256 collateralValue = collateralAmount * BTC_PRICE_USD;
         uint256 collateralRatio = (collateralValue * 10000) / borrowedAmount;
         
         return collateralRatio >= MIN_COLLATERAL_RATIO;

@@ -1,6 +1,4 @@
 require("dotenv").config();
-require("@nomicfoundation/hardhat-verify");
-require("@nomicfoundation/hardhat-ethers");
 
 /** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {
@@ -11,6 +9,7 @@ module.exports = {
         enabled: true,
         runs: 200,
       },
+      viaIR: true,
     },
   },
   networks: {

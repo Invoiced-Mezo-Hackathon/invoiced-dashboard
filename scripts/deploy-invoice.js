@@ -1,32 +1,37 @@
-const { network } = require("hardhat");
-const hre = require("hardhat");
+require("dotenv").config();
+const { JsonRpcProvider, Wallet, ContractFactory, formatEther } = require("ethers");
+const artifact = require("../artifacts/contracts/InvoiceContract.sol/InvoiceContract.json");
 
 async function main() {
   console.log("🚀 Deploying InvoiceContract...");
   
   try {
-    const [deployer] = await hre.ethers.getSigners();
-    console.log("Deploying with account:", deployer.address);
-    
-    const balance = await hre.ethers.provider.getBalance(deployer.address);
-    console.log("Balance:", hre.ethers.formatEther(balance));
+    const rpcUrl = process.env.MEZO_RPC_URL || "https://rpc.test.mezo.org";
+    const provider = new JsonRpcProvider(rpcUrl);
+    const pk = process.env.PRIVATE_KEY;
+    if (!pk) throw new Error("PRIVATE_KEY not set in .env");
+    const wallet = new Wallet(pk, provider);
+    const deployerAddress = await wallet.getAddress();
+    console.log("Deploying with account:", deployerAddress);
+    const balance = await provider.getBalance(deployerAddress);
+    console.log("Balance:", formatEther(balance));
 
-    if (network.name === "mezotestnet" && balance === 0n) {
-      console.log("⚠️  No testnet BTC! Get some from: https://testnet.mezo.org/");
+    // Warn if low balance
+    if (balance === 0n) {
+      console.log("⚠️  Low or zero balance. Fund the deployer on Mezo testnet.");
     }
 
     console.log("\nDeploying InvoiceContract...");
-    const InvoiceContract = await hre.ethers.getContractFactory("InvoiceContract");
-    const invoiceContract = await InvoiceContract.deploy();
-    await invoiceContract.waitForDeployment();
-    const invoiceAddress = await invoiceContract.getAddress();
+    const factory = new ContractFactory(artifact.abi, artifact.bytecode, wallet);
+    const contract = await factory.deploy();
+    await contract.waitForDeployment();
+    const invoiceAddress = await contract.getAddress();
     
     console.log("✅ InvoiceContract deployed to:", invoiceAddress);
-    console.log("🔗 Network:", network.name);
+    // Network name unknown without hre; print RPC URL instead
+    console.log("🔗 RPC:", rpcUrl);
     
-    if (network.name === "mezotestnet") {
-      console.log("🌐 Explorer:", `https://explorer.test.mezo.org/address/${invoiceAddress}`);
-    }
+    console.log("🌐 Explorer:", `https://explorer.test.mezo.org/address/${invoiceAddress}`);
     
     console.log("\n📋 Update src/lib/mezo.ts:");
     console.log(`  INVOICE_CONTRACT: '${invoiceAddress}',`);

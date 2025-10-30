@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { useAccount, useSwitchChain } from 'wagmi'
-import { mezoTestnet } from '@/main'
 import { Button } from './button'
 import { X, ExternalLink, AlertCircle, CheckCircle } from 'lucide-react'
 

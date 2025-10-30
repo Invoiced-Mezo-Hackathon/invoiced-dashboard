@@ -3,7 +3,7 @@ import { useAccount } from 'wagmi';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { User, Wallet, AlertTriangle, Download, Trash2, SettingsIcon, Bell } from 'lucide-react';
+import { User, Wallet, Download, SettingsIcon, Bell } from 'lucide-react';
 import { useWalletUtils } from '@/hooks/useWalletUtils';
 import { toast } from 'react-hot-toast';
 import { SettingsSection } from '@/components/settings/SettingsSection';
@@ -124,7 +124,7 @@ export function Settings() {
         clearTimeout(debounceTimer.current);
       }
     };
-  }, [address, name, avatar, currency, businessName, defaultPaymentTerms, defaultTaxRate, notificationsEnabled]);
+  }, [address, name, avatar, currency, businessName, defaultPaymentTerms, defaultTaxRate, notificationsEnabled, autoSave]);
 
   const handleExport = () => {
     if (!address) return;
@@ -295,13 +295,13 @@ export function Settings() {
           </div>
         </SettingsSection>
 
-        {/* Invoice Defaults */}
+        {/* Wallet Info */}
         <SettingsSection
-          title="Invoice Defaults"
-          description="Set default values for new invoices"
-          icon={SettingsIcon}
-          iconBgColor="bg-purple-500/10"
-          iconColor="text-purple-400"
+          title="Wallet"
+          description="Your connected wallet information"
+          icon={Wallet}
+          iconBgColor="bg-green-500/10"
+          iconColor="text-green-400"
         >
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>

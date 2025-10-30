@@ -1,4 +1,5 @@
 import { WalletStatus } from '@/components/ui/WalletStatus';
+import { NotificationBell } from '@/components/ui/NotificationBell';
 
 interface HeaderProps {
   onShowNetworkModal?: () => void;

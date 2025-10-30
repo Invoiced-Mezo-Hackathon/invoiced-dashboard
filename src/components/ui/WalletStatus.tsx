@@ -1,4 +1,3 @@
-import { useAccount } from 'wagmi';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { NetworkSwitch } from './NetworkSwitch';
 import { useWalletUtils } from '@/hooks/useWalletUtils';
@@ -8,7 +7,6 @@ interface WalletStatusProps {
 }
 
 export const WalletStatus = ({ onShowNetworkModal }: WalletStatusProps) => {
-  const { isConnected } = useAccount();
   const { isMezoTestnet, chainId } = useWalletUtils();
 
   return (

@@ -11,8 +11,9 @@ export interface BoarConfig {
 
 export const BOAR_CONFIG: BoarConfig = {
   apiKey: import.meta.env.VITE_BOAR_API_KEY || 'WfNc1YhD65vUESGOdWFMCGrvl6S5FMgg',
-  wsUrl: import.meta.env.VITE_BOAR_WS_URL || 'wss://rpc.boar.network/ws', // Updated URL
-  httpUrl: import.meta.env.VITE_BOAR_HTTP_URL || 'https://rpc.boar.network/api', // Updated URL
+  // Boar Network Mezo endpoints from https://dashboard.boar.network/personal/free
+  wsUrl: import.meta.env.VITE_BOAR_WS_URL || 'wss://rpc-ws.mezo.boar.network/WfNc1YhD65vUESGOdWFMCGrvl6S5FMgg',
+  httpUrl: import.meta.env.VITE_BOAR_HTTP_URL || 'https://rpc-http.mezo.boar.network/WfNc1YhD65vUESGOdWFMCGrvl6S5FMgg',
   reconnectInterval: 5000, // 5 seconds
   maxReconnectAttempts: 10,
 };
@@ -23,7 +24,7 @@ export const MEZO_EXPLORER_URL = 'https://explorer.test.mezo.org';
 // WebSocket message types for Boar API
 export interface BoarMessage {
   type: 'subscribe' | 'unsubscribe' | 'transaction' | 'block' | 'error';
-  data?: any;
+  data?: unknown;
   address?: string;
   txHash?: string;
   blockNumber?: number;
@@ -54,7 +55,7 @@ export class BoarError extends Error {
   constructor(
     message: string,
     public code: string,
-    public details?: any
+    public details?: unknown
   ) {
     super(message);
     this.name = 'BoarError';
