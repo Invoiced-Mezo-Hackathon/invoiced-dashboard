@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-contract InvoiceContract {
+import "@openzeppelin/contracts/access/AccessControl.sol";
+
+contract InvoiceContract is AccessControl {
     struct Invoice {
         uint256 id;
         address payable creator;        // Who created the invoice
@@ -26,6 +28,8 @@ contract InvoiceContract {
     mapping(uint256 => Invoice) public invoices;
     mapping(address => uint256[]) public userInvoices;  // Track invoices by creator
     uint256 public invoiceCount;
+    bytes32 public constant BOARD_ROLE = keccak256("BOARD_ROLE");
+    bytes32 public constant PAYMENT_ORACLE_ROLE = keccak256("PAYMENT_ORACLE_ROLE");
     
     event InvoiceCreated(
         uint256 indexed id, 
@@ -40,6 +44,12 @@ contract InvoiceContract {
     );
     event InvoicePaid(uint256 indexed id, uint256 amount, uint256 timestamp, string paymentTxHash, string observedInboundAmount);
     event InvoiceCancelled(uint256 indexed id, uint256 timestamp);
+    event InvoiceApproved(uint256 indexed id, address indexed approver, uint256 timestamp);
+
+    constructor() {
+        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _grantRole(BOARD_ROLE, msg.sender);
+    }
     
     function createInvoice(
         address payable _recipient,
@@ -94,16 +104,31 @@ contract InvoiceContract {
         return newInvoiceId;
     }
     
+    /**
+     * @notice Confirm payment for an invoice after Boar Network detects BTC receipt
+     * @param _id Invoice ID
+     * @param _paymentTxHash Transaction hash from Boar Network detection
+     * @param _observedInboundAmount Actual amount received (in wei, may exceed requested amount - overpayments accepted)
+     * @dev Validates expiry, payment status, and authorization. Stores observed amount to handle overpayments.
+     *      Frontend validates that observedAmount >= requested amount before calling this function.
+     */
     function confirmPayment(uint256 _id, string memory _paymentTxHash, string memory _observedInboundAmount) public {
         require(_id > 0 && _id <= invoiceCount, "Invalid invoice ID");
-        require(invoices[_id].creator == msg.sender, "Only invoice creator can confirm payment");
         require(!invoices[_id].paid, "Invoice already paid");
         require(!invoices[_id].cancelled, "Invoice is cancelled");
+        require(block.timestamp <= invoices[_id].expiresAt, "Invoice expired");
+
+        // Allow invoice creator or authorized oracle to confirm payment
+        // Oracle can auto-confirm when Boar detects payment >= requested amount
+        require(
+            invoices[_id].creator == msg.sender || hasRole(PAYMENT_ORACLE_ROLE, msg.sender),
+            "Not authorized to confirm"
+        );
         
         invoices[_id].paid = true;
         invoices[_id].paidAt = block.timestamp;
         invoices[_id].paymentTxHash = _paymentTxHash;
-        invoices[_id].observedInboundAmount = _observedInboundAmount;
+        invoices[_id].observedInboundAmount = _observedInboundAmount; // Can be > amount (overpayment accepted)
         
         emit InvoicePaid(_id, invoices[_id].amount, block.timestamp, _paymentTxHash, _observedInboundAmount);
     }
@@ -247,5 +272,11 @@ contract InvoiceContract {
         }
         
         return result;
+    }
+
+    function approveInvoice(uint256 _id) public onlyRole(BOARD_ROLE) {
+        require(_id > 0 && _id <= invoiceCount, "Invalid invoice ID");
+        require(invoices[_id].paid, "Invoice not paid");
+        emit InvoiceApproved(_id, msg.sender, block.timestamp);
     }
 }

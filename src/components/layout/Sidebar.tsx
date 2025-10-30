@@ -16,7 +16,7 @@ const navItems = [
   { id: 'settings', iconClass: 'fa-solid fa-gear', label: 'Settings' },
 ];
 
-export function Sidebar({ activeTab, onTabChange, onShowNetworkModal }: SidebarProps) {
+export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   return (

@@ -3,14 +3,14 @@
 
 import { BOAR_CONFIG } from '@/lib/boar-config';
 
-export interface BoarRPCResponse<T = any> {
+export interface BoarRPCResponse<T = unknown> {
   jsonrpc: string;
   id: number;
   result?: T;
   error?: {
     code: number;
     message: string;
-    data?: any;
+    data?: unknown;
   };
 }
 
@@ -35,16 +35,22 @@ class BoarRPCClient {
   private httpUrl: string;
   private apiKey: string;
   private requestId = 0;
+  private mezoHttpUrl: string;
 
   constructor() {
     this.httpUrl = BOAR_CONFIG.httpUrl;
     this.apiKey = BOAR_CONFIG.apiKey;
+    // Prefer explicit env; default to public Mezo testnet RPC
+    // Vite env read is safe in browser context
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore
+    this.mezoHttpUrl = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_MEZO_HTTP_URL) || 'https://rpc.test.mezo.org';
   }
 
-  // Generic JSON-RPC call with retry logic
-  private async call<T = any>(
+  // Generic JSON-RPC call with retry logic (uses BOAR endpoint)
+  private async call<T = unknown>(
     method: string, 
-    params: any[] = [], 
+    params: unknown[] = [], 
     retries = 2
   ): Promise<T> {
     const id = ++this.requestId;
@@ -102,6 +108,59 @@ class BoarRPCClient {
     throw new Error('Max retries exceeded');
   }
 
+  // Direct JSON-RPC call to a specific URL (used for Mezo RPC first)
+  private async callOn<T = unknown>(
+    rpcUrl: string,
+    method: string,
+    params: unknown[] = [],
+    retries = 1
+  ): Promise<T> {
+    const id = ++this.requestId;
+    const payload = {
+      jsonrpc: '2.0',
+      id,
+      method,
+      params,
+    };
+
+    const headers: HeadersInit = {
+      'Content-Type': 'application/json',
+    };
+
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try {
+        const response = await fetch(rpcUrl, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(payload),
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        const data: BoarRPCResponse<T> = await response.json();
+
+        if (data.error) {
+          throw new Error(`RPC Error ${data.error.code}: ${data.error.message}`);
+        }
+
+        if (data.result === undefined) {
+          throw new Error('No result in RPC response');
+        }
+
+        return data.result;
+      } catch (error) {
+        console.warn(`RPC call failed on ${rpcUrl} (attempt ${attempt + 1}/${retries + 1}):`, error);
+        if (attempt === retries) throw error;
+        const delay = Math.pow(2, attempt) * 500;
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+
+    throw new Error('Max retries exceeded');
+  }
+
   // Get address balance
   async getAddressBalance(address: string): Promise<BoarBalance> {
     try {
@@ -120,10 +179,17 @@ class BoarRPCClient {
       }
       
       console.log('🔍 Getting balance for address:', normalizedAddress);
-      const result = await this.call('eth_getBalance', [normalizedAddress, 'latest']);
+      // Prefer Mezo RPC first for native balance
+      let result: unknown;
+      try {
+        result = await this.callOn(this.mezoHttpUrl, 'eth_getBalance', [normalizedAddress, 'latest']);
+      } catch (primaryError) {
+        console.warn('Mezo RPC balance failed, falling back to Boar HTTP:', primaryError);
+        result = await this.call('eth_getBalance', [normalizedAddress, 'latest']);
+      }
       return {
         address: normalizedAddress,
-        balance: result,
+        balance: String(result),
         nonce: 0, // We'll get this separately if needed
       };
     } catch (error) {
@@ -132,24 +198,53 @@ class BoarRPCClient {
     }
   }
 
-  // Get transactions for an address (if supported by Boar)
+  // Get transactions for an address (chunked to respect provider block-range limits)
   async getAddressTransactions(address: string, fromBlock?: string): Promise<BoarTransaction[]> {
     try {
-      // Note: This method might not be available on all RPC providers
-      // We'll implement a fallback using eth_getLogs if needed
-      const result = await this.call('eth_getLogs', [
-        {
-          address,
-          fromBlock: fromBlock || '0x0',
-          toBlock: 'latest',
-        }
-      ]);
+      // Providers often cap [from,to] distance to 10k blocks. We'll chunk requests.
+      const latest = await this.getLatestBlockNumber();
+      const CHUNK_SIZE = 9500; // stay safely under 10k
 
-      // Convert logs to transaction format
-      // This is a simplified implementation - actual implementation would depend on Boar's API
-      return result.map((log: any) => ({
+      // Default start: scan only recent window if not specified
+      let start = fromBlock ? parseInt(fromBlock, 16) : Math.max(0, latest - CHUNK_SIZE);
+      const logsAll: Array<{ transactionHash: string; topics: string[]; data: string; blockNumber: string; }> = [];
+
+      while (start <= latest) {
+        const end = Math.min(start + CHUNK_SIZE, latest);
+        try {
+          const result = await this.call<unknown>('eth_getLogs', [
+            {
+              address,
+              fromBlock: '0x' + start.toString(16),
+              toBlock: end === latest ? 'latest' : ('0x' + end.toString(16)),
+            }
+          ]);
+          const batch = (result as Array<{ transactionHash: string; topics: string[]; data: string; blockNumber: string; }>) || [];
+          logsAll.push(...batch);
+        } catch (e) {
+          // If provider rejects due to range, reduce chunk size further for this slice
+          console.warn('eth_getLogs slice failed, reducing chunk size', { start, end, error: e });
+          if (end - start <= 1000) {
+            // give up on this tiny slice
+            break;
+          }
+          // back off the window and retry next iteration
+        }
+        start = end + 1;
+      }
+
+      type EthLog = {
+        transactionHash: string;
+        topics: string[];
+        data: string;
+        blockNumber: string;
+      };
+
+      const logs = (logsAll as EthLog[]) || [];
+
+      return logs.map((log: EthLog) => ({
         hash: log.transactionHash,
-        from: log.topics[1] || '0x0',
+        from: (log.topics && log.topics.length > 1 ? log.topics[1] : '0x0'),
         to: address,
         value: log.data || '0x0',
         blockNumber: parseInt(log.blockNumber, 16),
@@ -159,7 +254,6 @@ class BoarRPCClient {
       }));
     } catch (error) {
       console.error('Failed to get address transactions:', error);
-      // Return empty array if method not supported
       return [];
     }
   }
@@ -167,7 +261,15 @@ class BoarRPCClient {
   // Get transaction by hash
   async getTransaction(hash: string): Promise<BoarTransaction | null> {
     try {
-      const result = await this.call('eth_getTransactionByHash', [hash]);
+      type EthTransaction = {
+        hash: string;
+        from: string;
+        to: string | null;
+        value: string;
+        blockNumber?: string | null;
+      } | null;
+
+      const result = await this.call<EthTransaction>('eth_getTransactionByHash', [hash]);
       
       if (!result) {
         return null;
@@ -176,7 +278,7 @@ class BoarRPCClient {
       return {
         hash: result.hash,
         from: result.from,
-        to: result.to,
+        to: result.to || '0x0',
         value: result.value,
         blockNumber: result.blockNumber ? parseInt(result.blockNumber, 16) : 0,
         timestamp: Date.now(), // Would need to get from block timestamp
@@ -193,7 +295,7 @@ class BoarRPCClient {
   async getLatestBlockNumber(): Promise<number> {
     try {
       const result = await this.call('eth_blockNumber');
-      return parseInt(result, 16);
+      return parseInt(result as unknown as string, 16);
     } catch (error) {
       console.error('Failed to get latest block number:', error);
       throw error;
@@ -202,8 +304,7 @@ class BoarRPCClient {
 
   // Check if an address has received funds since a specific timestamp
   async checkInboundFunds(
-    address: string, 
-    sinceTimestamp: number
+    address: string
   ): Promise<{ hasFunds: boolean; amount: string; transactions: BoarTransaction[] }> {
     try {
       // Get current balance

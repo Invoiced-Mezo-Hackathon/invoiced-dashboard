@@ -1,4 +1,5 @@
 import { Invoice } from '@/types/invoice';
+import { parseEther } from 'viem';
 
 const STORAGE_KEY = 'invoiced_local_drafts_v1';
 
@@ -49,14 +50,14 @@ class InvoiceStorage {
               const oldInvoices = JSON.parse(oldData);
               if (Array.isArray(oldInvoices)) {
                 // Convert old invoices to new format
-                const migratedInvoices = oldInvoices.map((oldInvoice: any) => ({
-                  ...oldInvoice,
+                const migratedInvoices = oldInvoices.map((oldInvoice: unknown) => ({
+                  ...(oldInvoice as Record<string, unknown>),
                   // Ensure required fields exist
-                  expiresAt: oldInvoice.expiresAt || new Date(Date.now() + 60 * 60 * 1000).toISOString(),
-                  payToAddress: oldInvoice.payToAddress || oldInvoice.bitcoinAddress || '',
-                  requestedAmount: oldInvoice.requestedAmount || oldInvoice.amount?.toString() || '0',
-                  balanceAtCreation: oldInvoice.balanceAtCreation || '0',
-                  status: oldInvoice.status || 'pending',
+                  expiresAt: (oldInvoice as { expiresAt?: string }).expiresAt || new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+                  payToAddress: (oldInvoice as { payToAddress?: string; bitcoinAddress?: string }).payToAddress || (oldInvoice as { bitcoinAddress?: string }).bitcoinAddress || '',
+                  requestedAmount: (oldInvoice as { requestedAmount?: string; amount?: { toString: () => string } }).requestedAmount || (oldInvoice as { amount?: { toString: () => string } }).amount?.toString() || '0',
+                  balanceAtCreation: (oldInvoice as { balanceAtCreation?: string }).balanceAtCreation || '0',
+                  status: (oldInvoice as { status?: string }).status || 'pending',
                 }));
 
                 // Add to current drafts
@@ -160,28 +161,48 @@ class InvoiceStorage {
   }
 
   // Create a new invoice with proper timestamps and expiry
-  createInvoice(formData: any): DraftInvoice {
+  createInvoice(formData: unknown): DraftInvoice {
     const now = new Date();
     const expiresAt = new Date(now.getTime() + 60 * 60 * 1000); // 1 hour from now
     
+    const form = formData as {
+      clientName: string;
+      clientCode?: string;
+      details: string;
+      amount: string;
+      currency?: string;
+      bitcoinAddress: string;
+      payToAddress?: string;
+      balanceAtCreation?: string;
+    };
+
+    // Convert requested amount (BTC decimal) to wei string for on-chain consistency
+    const requestedAmountWei = (() => {
+      try {
+        return parseEther(form.amount).toString();
+      } catch {
+        return '0';
+      }
+    })();
+
     const invoice: DraftInvoice = {
       id: `draft_${Date.now()}`,
-      clientName: formData.clientName,
-      clientCode: formData.clientCode || '',
-      details: formData.details,
-      amount: parseFloat(formData.amount),
-      currency: formData.currency || 'USD',
-      musdAmount: parseFloat(formData.amount), // Assuming 1:1 for now
+      clientName: form.clientName,
+      clientCode: form.clientCode || '',
+      details: form.details,
+      amount: parseFloat(form.amount),
+      currency: (form.currency as 'USD' | 'KES') || 'USD',
+      musdAmount: parseFloat(form.amount), // Assuming 1:1 for now
       status: 'pending',
       createdAt: now.toISOString(),
       expiresAt: expiresAt.toISOString(),
-      wallet: formData.bitcoinAddress,
-      bitcoinAddress: formData.bitcoinAddress,
-      payToAddress: formData.payToAddress,
+      wallet: form.bitcoinAddress,
+      bitcoinAddress: form.bitcoinAddress,
+      payToAddress: form.payToAddress ?? '',
       creator: '', // Will be set when synced
       recipient: '', // Will be set when synced
-      requestedAmount: formData.amount,
-      balanceAtCreation: formData.balanceAtCreation || '0',
+      requestedAmount: requestedAmountWei,
+      balanceAtCreation: form.balanceAtCreation || '0',
       syncPending: true,
     };
 

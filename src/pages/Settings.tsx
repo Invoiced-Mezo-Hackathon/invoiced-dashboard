@@ -3,7 +3,7 @@ import { useAccount } from 'wagmi';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { User, Wallet, AlertTriangle, Download, Trash2, SettingsIcon, Bell } from 'lucide-react';
+import { User, Wallet, Download, SettingsIcon, Bell } from 'lucide-react';
 import { useWalletUtils } from '@/hooks/useWalletUtils';
 import { toast } from 'react-hot-toast';
 import { SettingsSection } from '@/components/settings/SettingsSection';
@@ -124,7 +124,7 @@ export function Settings() {
         clearTimeout(debounceTimer.current);
       }
     };
-  }, [address, name, avatar, currency, businessName, defaultPaymentTerms, defaultTaxRate, notificationsEnabled]);
+  }, [address, name, avatar, currency, businessName, defaultPaymentTerms, defaultTaxRate, notificationsEnabled, autoSave]);
 
   const handleExport = () => {
     if (!address) return;
@@ -217,35 +217,7 @@ export function Settings() {
       </div>
 
       <div className="max-w-3xl mx-auto space-y-4">
-        {/* Wallet Info - Now First */}
-        <SettingsSection
-          title="Wallet"
-          description="Your connected wallet information"
-          icon={Wallet}
-          iconBgColor="bg-green-500/10"
-          iconColor="text-green-400"
-        >
-          <div className="space-y-4">
-            <div className="flex items-center justify-between p-4 rounded-xl bg-[#2C2C2E]/20 border border-green-400/10">
-              <div>
-                <p className="text-sm text-white/60 mb-1 font-navbar">Connected Wallet</p>
-                <p className="font-mono text-sm text-white">{formatAddress(address!)}</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-green-400"></div>
-                <span className="text-xs text-green-400 font-navbar">Connected</span>
-              </div>
-            </div>
-            <div className="flex items-center justify-between p-4 rounded-xl bg-[#2C2C2E]/20 border border-green-400/10">
-              <div>
-                <p className="text-sm text-white/60 mb-1 font-navbar">Network</p>
-                <p className="text-sm font-medium text-white font-navbar">{getNetworkName(chainId)}</p>
-              </div>
-            </div>
-          </div>
-        </SettingsSection>
-
-        {/* Profile Section */}
+        {/* Profile Section - Moved to top */}
         <SettingsSection
           title="Profile"
           description="Customize your identity"
@@ -295,50 +267,30 @@ export function Settings() {
           </div>
         </SettingsSection>
 
-        {/* Invoice Defaults */}
+        {/* Wallet Info */}
         <SettingsSection
-          title="Invoice Defaults"
-          description="Set default values for new invoices"
-          icon={SettingsIcon}
-          iconBgColor="bg-purple-500/10"
-          iconColor="text-purple-400"
+          title="Wallet"
+          description="Your connected wallet information"
+          icon={Wallet}
+          iconBgColor="bg-green-500/10"
+          iconColor="text-green-400"
         >
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="paymentTerms" className="text-sm text-white/70 mb-2 block font-navbar">
-                Default Payment Terms (days)
-              </Label>
-              <select
-                id="paymentTerms"
-                value={defaultPaymentTerms}
-                onChange={(e) => setDefaultPaymentTerms(Number(e.target.value))}
-                className="w-full p-3 rounded-lg bg-[#2C2C2E]/40 backdrop-blur-xl border border-green-400/20 focus:border-green-400/40 text-white"
-                disabled={!isConnected}
-              >
-                <option value="7">7 days</option>
-                <option value="14">14 days</option>
-                <option value="30">30 days</option>
-                <option value="60">60 days</option>
-                <option value="90">90 days</option>
-              </select>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between p-4 rounded-xl bg-[#2C2C2E]/20 border border-green-400/10">
+              <div>
+                <p className="text-sm text-white/60 mb-1 font-navbar">Connected Wallet</p>
+                <p className="font-mono text-sm text-white">{formatAddress(address!)}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-green-400"></div>
+                <span className="text-xs text-green-400 font-navbar">Connected</span>
+              </div>
             </div>
-
-            <div>
-              <Label htmlFor="taxRate" className="text-sm text-white/70 mb-2 block font-navbar">
-                Default Tax Rate (%)
-              </Label>
-              <Input
-                id="taxRate"
-                type="number"
-                min="0"
-                max="100"
-                step="0.1"
-                value={defaultTaxRate}
-                onChange={(e) => setDefaultTaxRate(parseFloat(e.target.value) || 0)}
-                className="bg-[#2C2C2E]/40 backdrop-blur-xl border border-green-400/20 focus:border-green-400/40 text-white placeholder:text-white/40"
-                placeholder="0"
-                disabled={!isConnected}
-              />
+            <div className="flex items-center justify-between p-4 rounded-xl bg-[#2C2C2E]/20 border border-green-400/10">
+              <div>
+                <p className="text-sm text-white/60 mb-1 font-navbar">Network</p>
+                <p className="text-sm font-medium text-white font-navbar">{getNetworkName(chainId)}</p>
+              </div>
             </div>
           </div>
         </SettingsSection>

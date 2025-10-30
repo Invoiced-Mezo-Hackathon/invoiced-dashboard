@@ -51,8 +51,22 @@ async function main() {
     wallet
   );
   
-  const musdToken = await musdFactory.deploy();
-  await musdToken.waitForDeployment();
+  console.log("⏳ Deploying MUSD token (this may take 30-60 seconds)...");
+  let musdToken;
+  let musdRetries = 3;
+  while (musdRetries > 0) {
+    try {
+      musdToken = await musdFactory.deploy();
+      console.log("⏳ Waiting for MUSD deployment confirmation...");
+      await musdToken.waitForDeployment();
+      break;
+    } catch (error) {
+      musdRetries--;
+      if (musdRetries === 0) throw error;
+      console.log(`⚠️ MUSD deployment attempt failed, retrying... (${musdRetries} attempts left)`);
+      await new Promise(resolve => setTimeout(resolve, 5000));
+    }
+  }
   const musdAddress = await musdToken.getAddress();
   console.log("✅ MUSDToken deployed to:", musdAddress);
   console.log("🌐 Explorer:", `https://explorer.test.mezo.org/address/${musdAddress}`);
@@ -73,17 +87,56 @@ async function main() {
     wallet
   );
   
-  const vault = await vaultFactory.deploy(musdAddress);
-  await vault.waitForDeployment();
+  console.log("⏳ Deploying vault contract (this may take 30-60 seconds)...");
+  let vault;
+  let retries = 3;
+  while (retries > 0) {
+    try {
+      vault = await vaultFactory.deploy(musdAddress);
+      console.log("⏳ Waiting for deployment confirmation...");
+      await vault.waitForDeployment();
+      break;
+    } catch (error) {
+      retries--;
+      if (retries === 0) throw error;
+      console.log(`⚠️ Deployment attempt failed, retrying... (${retries} attempts left)`);
+      await new Promise(resolve => setTimeout(resolve, 5000));
+    }
+  }
   const vaultAddress = await vault.getAddress();
   console.log("✅ MezoVaultContract deployed to:", vaultAddress);
   console.log("🌐 Explorer:", `https://explorer.test.mezo.org/address/${vaultAddress}`);
 
   // Step 3: Set Vault as MUSD minter
   console.log("\n🔗 Step 3: Linking Vault as MUSD minter...");
-  const setMinterTx = await musdToken.addMinter(vaultAddress);
-  await setMinterTx.wait();
-  console.log("✅ Vault is now a minter for MUSD");
+  console.log("⏳ Setting vault as minter (this may take 30-60 seconds)...");
+  let setMinterTx;
+  let minterRetries = 3;
+  while (minterRetries > 0) {
+    try {
+      setMinterTx = await musdToken.addMinter(vaultAddress);
+      console.log("⏳ Waiting for transaction confirmation...");
+      await setMinterTx.wait();
+      console.log("✅ Vault is now a minter for MUSD");
+      
+      // Verify minter status
+      const isMinter = await musdToken.minters(vaultAddress);
+      if (isMinter) {
+        console.log("✅ Verified: Vault is confirmed as MUSD minter");
+      } else {
+        console.log("⚠️ Warning: Could not verify minter status, but transaction succeeded");
+      }
+      break;
+    } catch (error) {
+      minterRetries--;
+      if (minterRetries === 0) {
+        console.error("❌ Failed to set vault as minter after retries:", error.message);
+        throw error;
+      }
+      console.log(`⚠️ Setting minter failed, retrying... (${minterRetries} attempts left)`);
+      await new Promise(resolve => setTimeout(resolve, 5000));
+    }
+  }
 
   // Step 4: Save addresses to file
   console.log("\n💾 Saving deployment info...");

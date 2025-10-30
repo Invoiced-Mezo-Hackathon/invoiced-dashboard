@@ -40,7 +40,7 @@ export interface Invoice {
   paidAt?: string; // ISO string, only if paid
   txHash?: string; // Transaction hash for creation
   paymentTxHash?: string; // Transaction hash for payment confirmation
-  requestedAmount: string; // Amount in smallest unit (wei/satoshi)
+  requestedAmount: string; // Amount in wei (10^18 base unit), stored as string
   observedInboundAmount?: string; // Actual amount received
   balanceAtCreation?: string; // Snapshot from Boar at creation time
 }
@@ -157,6 +157,7 @@ export interface UseInvoiceContractReturn {
   createInvoice: (data: InvoiceFormData) => Promise<void>;
   confirmPayment: (invoiceId: string) => Promise<void>;
   cancelInvoice: (invoiceId: string) => Promise<void>;
+  approveInvoice: (invoiceId: string) => Promise<void>;
   refreshData: () => Promise<void>;
   
   // Error handling

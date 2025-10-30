@@ -1,26 +1,12 @@
+import { useState, useEffect } from 'react';
 import { TrendingUp, Clock, Vault, Activity, DollarSign, Users, FileText, CreditCard } from 'lucide-react';
+import type { Invoice, InvoiceStats as InvoiceStatsType } from '@/types/invoice';
+import { useAccount, useWatchContractEvent } from 'wagmi';
+import { MEZO_CONTRACTS, INVOICE_CONTRACT_ABI, BORROW_MANAGER_ABI } from '@/lib/mezo';
+import { useMezoVault } from '@/hooks/useMezoVault';
+import { paymentMonitor, PaymentEvent } from '@/services/payment-monitor';
 
-interface Invoice {
-  id: string;
-  clientName: string;
-  clientCode: string;
-  details: string;
-  amount: number;
-  currency: string;
-  musdAmount: number;
-  status: 'pending' | 'paid' | 'cancelled';
-  createdAt: string;
-  wallet: string;
-  bitcoinAddress?: string;
-}
-
-interface InvoiceStats {
-  totalRevenue: number;
-  activeInvoices: number;
-  pendingAmount: number;
-  totalInvoices: number;
-  paidInvoices: number;
-}
+type InvoiceStats = InvoiceStatsType;
 
 interface DashboardProps {
   onNavigate: (tab: string) => void;
@@ -29,6 +15,116 @@ interface DashboardProps {
 }
 
 export function Dashboard({ onNavigate, invoices, stats }: DashboardProps) {
+  const { address, isConnected } = useAccount();
+  const { refetchAll: refetchVault, vaultData, musdBalance, collateralBalance, borrowedAmount } = useMezoVault();
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+  // Watch invoice events for real-time updates
+  useWatchContractEvent({
+    address: MEZO_CONTRACTS.INVOICE_CONTRACT as `0x${string}`,
+    abi: INVOICE_CONTRACT_ABI,
+    eventName: 'InvoiceCreated',
+    onLogs: () => {
+      console.log('📊 Dashboard: InvoiceCreated detected, triggering refresh');
+      setRefreshTrigger((v) => v + 1);
+    }
+  });
+
+  useWatchContractEvent({
+    address: MEZO_CONTRACTS.INVOICE_CONTRACT as `0x${string}`,
+    abi: INVOICE_CONTRACT_ABI,
+    eventName: 'InvoicePaid',
+    onLogs: () => {
+      console.log('📊 Dashboard: InvoicePaid detected, triggering refresh');
+      setRefreshTrigger((v) => v + 1);
+    }
+  });
+
+  useWatchContractEvent({
+    address: MEZO_CONTRACTS.INVOICE_CONTRACT as `0x${string}`,
+    abi: INVOICE_CONTRACT_ABI,
+    eventName: 'InvoiceApproved',
+    onLogs: () => {
+      console.log('📊 Dashboard: InvoiceApproved detected, triggering refresh');
+      setRefreshTrigger((v) => v + 1);
+    }
+  });
+
+  useWatchContractEvent({
+    address: MEZO_CONTRACTS.INVOICE_CONTRACT as `0x${string}`,
+    abi: INVOICE_CONTRACT_ABI,
+    eventName: 'InvoiceCancelled',
+    onLogs: () => {
+      console.log('📊 Dashboard: InvoiceCancelled detected, triggering refresh');
+      setRefreshTrigger((v) => v + 1);
+    }
+  });
+
+  // Watch vault events for real-time updates
+  useWatchContractEvent({
+    address: MEZO_CONTRACTS.MEZO_VAULT as `0x${string}`,
+    abi: BORROW_MANAGER_ABI,
+    eventName: 'CollateralDeposited',
+    onLogs: () => {
+      console.log('📊 Dashboard: CollateralDeposited detected, triggering vault refresh');
+      refetchVault();
+    }
+  });
+
+  useWatchContractEvent({
+    address: MEZO_CONTRACTS.MEZO_VAULT as `0x${string}`,
+    abi: BORROW_MANAGER_ABI,
+    eventName: 'MUSDBorrowed',
+    onLogs: () => {
+      console.log('📊 Dashboard: MUSDBorrowed detected, triggering vault refresh');
+      refetchVault();
+    }
+  });
+
+  useWatchContractEvent({
+    address: MEZO_CONTRACTS.MEZO_VAULT as `0x${string}`,
+    abi: BORROW_MANAGER_ABI,
+    eventName: 'MUSDRepaid',
+    onLogs: () => {
+      console.log('📊 Dashboard: MUSDRepaid detected, triggering vault refresh');
+      refetchVault();
+    }
+  });
+
+  useWatchContractEvent({
+    address: MEZO_CONTRACTS.MEZO_VAULT as `0x${string}`,
+    abi: BORROW_MANAGER_ABI,
+    eventName: 'CollateralWithdrawn',
+    onLogs: () => {
+      console.log('📊 Dashboard: CollateralWithdrawn detected, triggering vault refresh');
+      refetchVault();
+    }
+  });
+
+  // Watch payment monitor events
+  useEffect(() => {
+    const handlePaymentEvent = (event: PaymentEvent) => {
+      if (event.type === 'payment_detected' || event.type === 'payment_confirmed') {
+        console.log('📊 Dashboard: Payment event detected, triggering refresh');
+        setRefreshTrigger((v) => v + 1);
+      }
+    };
+
+    paymentMonitor.setCallbacks({
+      onPaymentDetected: handlePaymentEvent,
+      onPaymentConfirmed: handlePaymentEvent,
+    });
+
+    return () => {
+      paymentMonitor.setCallbacks({});
+    };
+  }, []);
+
+  // Force re-render when refresh trigger changes (to update stats)
+  useEffect(() => {
+    // This effect ensures the component re-renders when events fire
+    // The parent App component will pass updated invoices/stats via props
+  }, [refreshTrigger]);
   // Use stats from hook if available, otherwise calculate from invoices
   const totalRevenue = stats?.totalRevenue ?? invoices
     .filter(invoice => invoice.status === 'paid')
@@ -39,9 +135,6 @@ export function Dashboard({ onNavigate, invoices, stats }: DashboardProps) {
   const pendingAmount = stats?.pendingAmount ?? invoices
     .filter(invoice => invoice.status === 'pending')
     .reduce((sum, invoice) => sum + invoice.amount, 0);
-
-  // Get recent invoices (last 5)
-  const recentInvoices = invoices.slice(0, 5);
 
   const statsData = [
     {
@@ -131,7 +224,7 @@ export function Dashboard({ onNavigate, invoices, stats }: DashboardProps) {
       label: 'View Analytics',
       description: 'Business insights and trends',
       icon: Activity,
-      tab: 'settings',
+      tab: 'analytics',
       emoji: '📊',
       gradient: 'from-purple-500 to-pink-600',
       bgColor: 'bg-purple-500/20',

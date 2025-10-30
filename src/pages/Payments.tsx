@@ -1,31 +1,18 @@
-import { useState, useEffect } from 'react';
-import { ArrowDownLeft, BarChart3, List, ExternalLink } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
+import { useState, useEffect, useMemo } from 'react';
+import { ArrowDownLeft, BarChart3, ExternalLink } from 'lucide-react';
 import { transactionStorage } from '@/services/transaction-storage';
 import { MEZO_EXPLORER_URL } from '@/lib/boar-config';
-
-interface Invoice {
-  id: string;
-  clientName: string;
-  clientCode: string;
-  details: string;
-  amount: number;
-  currency: string;
-  musdAmount: number;
-  status: 'pending' | 'paid' | 'cancelled';
-  createdAt: string;
-  wallet: string;
-  bitcoinAddress?: string;
-}
+import type { Invoice } from '@/types/invoice';
+import { useWatchContractEvent } from 'wagmi';
+import { INVOICE_CONTRACT_ABI, MEZO_CONTRACTS } from '@/lib/mezo';
 
 interface PaymentsProps {
   invoices: Invoice[];
 }
 
 export function Payments({ invoices }: PaymentsProps) {
-  const [viewMode, setViewMode] = useState<'list' | 'graph'>('list');
   const [bitcoinPrice, setBitcoinPrice] = useState<number>(0);
+  const [version, setVersion] = useState(0); // trigger refresh when new events arrive
 
   // Fetch real-time Bitcoin price
   useEffect(() => {
@@ -43,51 +30,153 @@ export function Payments({ invoices }: PaymentsProps) {
     fetchBitcoinPrice();
   }, []);
 
-  // Calculate payment history from invoices with transaction details
-  const paymentHistory = invoices
-    .filter(invoice => invoice.status === 'paid')
-    .map(invoice => {
-      // Get transaction details from storage
-      const transactions = transactionStorage.getTransactionsForInvoice(invoice.id);
-      const latestTransaction = transactions[0]; // Most recent transaction
-      
-      return {
-        id: invoice.id,
-        type: 'received' as const,
-        counterparty: invoice.clientName,
-        amount: invoice.amount,
-        date: invoice.paidAt || invoice.createdAt,
-        status: latestTransaction?.status || 'confirmed',
-        bitcoinAddress: invoice.bitcoinAddress,
-        // Enhanced transaction details
-        txHash: latestTransaction?.txHash || invoice.paymentTxHash,
-        blockNumber: latestTransaction?.blockNumber,
-        confirmations: latestTransaction?.confirmations,
-        from: latestTransaction?.from,
-        to: latestTransaction?.to,
-      };
-    });
+  // Subscribe to on-chain events to keep payments list fresh
+  useEffect(() => {
+    const onStorageUpdate = () => setVersion((v) => v + 1);
+    if (typeof window !== 'undefined') {
+      window.addEventListener('transactions_updated', onStorageUpdate);
+    }
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('transactions_updated', onStorageUpdate);
+      }
+    };
+  }, []);
+
+  // Subscribe to on-chain events to keep payments list fresh
+  useWatchContractEvent({
+    address: MEZO_CONTRACTS.INVOICE_CONTRACT as `0x${string}`,
+    abi: INVOICE_CONTRACT_ABI,
+    eventName: 'InvoicePaid',
+    onLogs: (logs) => {
+      console.log('💰 InvoicePaid event detected, storing transaction details...');
+      // Store complete transaction info with all payment details
+      for (const log of logs) {
+        // InvoicePaid(uint256 indexed id, uint256 amount, uint256 timestamp, string paymentTxHash, string observedInboundAmount)
+        const invoiceId = (log.args?.id as bigint | undefined)?.toString();
+        const txHash = log.transactionHash as string | undefined;
+        
+        // Access event args - wagmi uses array position or named access
+        const args = log.args as any;
+        const requestedAmount = args?.amount ? String(args.amount) : '0';
+        const paymentTxHash = typeof args?.paymentTxHash === 'string' ? args.paymentTxHash : undefined;
+        const observedAmount = typeof args?.observedInboundAmount === 'string' ? args.observedInboundAmount : undefined;
+        const timestamp = args?.timestamp ? Number(args.timestamp) : Date.now();
+        
+        if (!invoiceId || !txHash) {
+          console.warn('⚠️ InvoicePaid event missing invoiceId or txHash', log);
+          continue;
+        }
+        
+        // Use observed amount if available (handles overpayments), otherwise use requested amount
+        const actualAmount = observedAmount && observedAmount !== '0' && observedAmount !== '' 
+          ? observedAmount 
+          : requestedAmount;
+        
+        console.log('📝 Storing payment transaction:', {
+          invoiceId,
+          txHash,
+          paymentTxHash,
+          requestedAmount,
+          observedAmount,
+          actualAmount
+        });
+        
+        // Check if transaction already exists to avoid duplicates
+        const existingTx = transactionStorage.getTransactionByHash(txHash);
+        if (!existingTx) {
+          transactionStorage.addTransaction({
+            txHash,
+            invoiceId,
+            from: '',
+            to: '',
+            amount: actualAmount, // Use observed amount (may be more than requested)
+            blockNumber: Number(log.blockNumber ?? 0),
+            timestamp: timestamp > 0 ? timestamp : Date.now(),
+            confirmations: 1,
+            status: 'confirmed',
+          });
+          
+          // Also store the Boar payment transaction hash if different from confirm tx
+          if (paymentTxHash && paymentTxHash !== '' && paymentTxHash !== txHash) {
+            const boarTx = transactionStorage.getTransactionByHash(paymentTxHash);
+            if (!boarTx) {
+              transactionStorage.addTransaction({
+                txHash: paymentTxHash,
+                invoiceId,
+                from: '',
+                to: '',
+                amount: actualAmount,
+                blockNumber: Number(log.blockNumber ?? 0),
+                timestamp: timestamp > 0 ? timestamp : Date.now(),
+                confirmations: 1,
+                status: 'confirmed',
+              });
+            }
+          }
+        } else {
+          console.log('ℹ️ Transaction already stored, updating details...');
+          // Update existing transaction with latest info
+          if (observedAmount && observedAmount !== '0' && observedAmount !== '') {
+            existingTx.amount = observedAmount;
+            transactionStorage.updateTransactionStatus(txHash, 'confirmed');
+          }
+        }
+      }
+      console.log('✅ Payment transactions stored, refreshing Payments page');
+      setVersion((v) => v + 1);
+    }
+  });
+
+  useWatchContractEvent({
+    address: MEZO_CONTRACTS.INVOICE_CONTRACT as `0x${string}`,
+    abi: INVOICE_CONTRACT_ABI,
+    eventName: 'InvoiceApproved',
+    onLogs: () => {
+      setVersion((v) => v + 1);
+    }
+  });
+
+  // Calculate payment history from invoices with transaction details (memoized)
+  const paymentHistory = useMemo(() => {
+    return invoices
+      .filter(invoice => invoice.status === 'paid')
+      .map(invoice => {
+        const transactions = transactionStorage.getTransactionsForInvoice(invoice.id);
+        const latestTransaction = transactions[0];
+        
+        // Use observed amount from transaction if available (handles overpayments)
+        // Convert from wei to BTC for display
+        let displayAmount = invoice.amount; // Default to requested amount
+        if (latestTransaction?.amount) {
+          try {
+            // Transaction amount is in wei, convert to BTC
+            const amountInWei = BigInt(latestTransaction.amount);
+            displayAmount = Number(amountInWei) / Math.pow(10, 18);
+          } catch (e) {
+            console.warn('Failed to parse transaction amount, using invoice amount:', e);
+          }
+        }
+        
+        return {
+          id: invoice.id,
+          type: 'received' as const,
+          counterparty: invoice.clientName,
+          amount: displayAmount, // Use actual received amount (may be more than requested)
+          requestedAmount: invoice.amount, // Keep original requested amount for reference
+          date: invoice.paidAt || invoice.createdAt,
+          status: latestTransaction?.status || 'confirmed',
+          bitcoinAddress: invoice.bitcoinAddress,
+          txHash: latestTransaction?.txHash || invoice.paymentTxHash,
+          blockNumber: latestTransaction?.blockNumber,
+          confirmations: latestTransaction?.confirmations,
+          from: latestTransaction?.from,
+          to: latestTransaction?.to,
+        };
+      });
+  }, [invoices, version]);
 
   const totalReceived = paymentHistory.reduce((sum, payment) => sum + payment.amount, 0);
-
-  // Generate chart data from payment history
-  const chartData = paymentHistory.reduce((acc, payment) => {
-    const date = new Date(payment.date).toLocaleDateString();
-    const existing = acc.find(item => item.day === date);
-    
-    if (existing) {
-      existing.balance += payment.amount;
-      existing.received += payment.amount;
-    } else {
-      acc.push({
-        day: date,
-        balance: payment.amount,
-        received: payment.amount,
-      });
-    }
-    
-    return acc;
-  }, [] as any[]).sort((a, b) => new Date(a.day).getTime() - new Date(b.day).getTime());
 
 
   return (

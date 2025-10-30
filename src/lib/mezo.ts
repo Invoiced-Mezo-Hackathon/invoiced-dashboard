@@ -1,6 +1,11 @@
 // Mezo Integration Library
 // Based on Mezo's MUSD protocol for Bitcoin-backed stablecoin lending
 
+// Import full ABI from compiled artifacts for better compatibility
+import MezoVaultABI from '../../artifacts/contracts/MezoVaultContract.sol/MezoVaultContract.json';
+import MUSDTokenABI from '../../artifacts/contracts/MUSDToken.sol/MUSDToken.json';
+import InvoiceContractABI from '../../artifacts/contracts/InvoiceContract.sol/InvoiceContract.json';
+
 export interface MezoVault {
   id: string;
   collateralAmount: string; // BTC amount
@@ -22,71 +27,21 @@ export interface MezoTransaction {
 // Mezo Testnet Contract Addresses
 // These are the actual deployed addresses on Mezo testnet
 export const MEZO_CONTRACTS = {
-  MUSD_TOKEN: '0xbe4363AbD7c8A4EB0888eD8b90c32E02d7CFbD27', // MUSD Token (verified)
+  MUSD_TOKEN: '0x7D546f04169F45779215015FFa9e8c9215927D32', // MUSD Token (verified)
   BORROW_MANAGER: '0x1234567890123456789012345678901234567890', // Placeholder - will be updated after deployment
   STABILITY_POOL: '0x1234567890123456789012345678901234567890', // Placeholder - will be updated after deployment
   TROVE_MANAGER: '0x1234567890123456789012345678901234567890', // Placeholder - will be updated after deployment
-  MEZO_VAULT: '0x5EA6656ABC65C88125530234E70579841a0A3701', // Our custom vault contract - will be updated after deployment
-  INVOICE_CONTRACT: '0xF3De98fc5da07D98a59cFAAC45D13f6d39cCEe24', // Updated Invoice contract with new fields
+  MEZO_VAULT: '0x5294E4C68c928E84E73E3626635bbFB28B0a76A2', // Our custom vault contract - will be updated after deployment
+  INVOICE_CONTRACT: '0xaa74f433D9A4BEE15d3c5f954675036B5e2b06F6', // Latest deployment on Mezo testnet
 };
 
-// Contract ABIs for Mezo integration
-export const MUSD_ABI = [
-  // ERC20 standard functions
-  "function balanceOf(address owner) view returns (uint256)",
-  "function transfer(address to, uint256 amount) returns (bool)",
-  "function approve(address spender, uint256 amount) returns (bool)",
-  "function allowance(address owner, address spender) view returns (uint256)",
-  // MUSD specific functions
-  "function mint(address to, uint256 amount)",
-  "function burn(uint256 amount)",
-  "function totalSupply() view returns (uint256)",
-  "function decimals() view returns (uint8)",
-  "function symbol() view returns (string)",
-  "function name() view returns (string)",
-] as const;
+// Contract ABIs for Mezo integration - using full compiled ABI for better compatibility
+export const MUSD_ABI = MUSDTokenABI.abi;
 
-export const BORROW_MANAGER_ABI = [
-  // Borrowing functions
-  "function depositCollateral(uint256 amount)",
-  "function borrowMUSD(uint256 amount)",
-  "function repayMUSD(uint256 amount)",
-  "function withdrawCollateral(uint256 amount)",
-  // View functions
-  "function getCollateralRatio(address user) view returns (uint256)",
-  "function getHealthFactor(address user) view returns (uint256)",
-  "function getCollateralBalance(address user) view returns (uint256)",
-  "function getBorrowedAmount(address user) view returns (uint256)",
-  "function getInterestRate() view returns (uint256)",
-  "function getLiquidationPrice(address user) view returns (uint256)",
-  // Events
-  "event CollateralDeposited(address indexed user, uint256 amount)",
-  "event MUSDBorrowed(address indexed user, uint256 amount)",
-  "event MUSDRepaid(address indexed user, uint256 amount)",
-  "event CollateralWithdrawn(address indexed user, uint256 amount)",
-] as const;
+export const BORROW_MANAGER_ABI = MezoVaultABI.abi;
 
-export const INVOICE_CONTRACT_ABI = [
-  // Invoice management functions
-  "function createInvoice(address _recipient, uint256 _amount, string memory _description, string memory _bitcoinAddress, string memory _clientName, string memory _clientCode, uint256 _expiresAt, string memory _payToAddress, string memory _currency, string memory _balanceAtCreation) returns (uint256)",
-  "function confirmPayment(uint256 _id, string memory _paymentTxHash, string memory _observedInboundAmount)",
-  "function cancelInvoice(uint256 _id)",
-  // View functions
-  "function getInvoice(uint256 _id) view returns (tuple(uint256 id, address creator, address recipient, uint256 amount, string description, string bitcoinAddress, string clientName, string clientCode, bool paid, bool cancelled, uint256 createdAt, uint256 paidAt, uint256 expiresAt, string payToAddress, string paymentTxHash, string observedInboundAmount, string currency, string balanceAtCreation))",
-  "function getUserInvoices(address _user) view returns (uint256[])",
-  "function getPaidInvoices(address _user) view returns (uint256[])",
-  "function getPendingInvoices(address _user) view returns (uint256[])",
-  "function getTotalRevenue(address _user) view returns (uint256)",
-  "function getPendingAmount(address _user) view returns (uint256)",
-  "function getUserInvoiceCount(address _user) view returns (uint256)",
-  "function getAllInvoices() view returns (tuple(uint256 id, address creator, address recipient, uint256 amount, string description, string bitcoinAddress, string clientName, string clientCode, bool paid, bool cancelled, uint256 createdAt, uint256 paidAt, uint256 expiresAt, string payToAddress, string paymentTxHash, string observedInboundAmount, string currency, string balanceAtCreation)[])",
-  "function getInvoicesByStatus(bool includePaid, bool includeCancelled) view returns (uint256[])",
-  "function invoiceCount() view returns (uint256)",
-  // Events
-  "event InvoiceCreated(uint256 indexed id, address indexed creator, address indexed recipient, uint256 amount, string bitcoinAddress, string clientName, string payToAddress, string currency, uint256 expiresAt)",
-  "event InvoicePaid(uint256 indexed id, uint256 amount, uint256 timestamp, string paymentTxHash, string observedInboundAmount)",
-  "event InvoiceCancelled(uint256 indexed id, uint256 timestamp)",
-] as const;
+// Use full compiled ABI from artifact for InvoiceContract
+export const INVOICE_CONTRACT_ABI = InvoiceContractABI.abi;
 
 // Utility functions for Mezo integration
 export class MezoUtils {
@@ -138,7 +93,7 @@ export class MezoError extends Error {
   constructor(
     message: string,
     public code: string,
-    public details?: any
+    public details?: unknown
   ) {
     super(message);
     this.name = 'MezoError';

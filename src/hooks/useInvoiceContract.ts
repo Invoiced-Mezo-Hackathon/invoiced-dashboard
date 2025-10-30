@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
+import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt, useWatchContractEvent } from 'wagmi';
 import { parseEther, formatEther } from 'viem';
 import toast from 'react-hot-toast';
 import { 
@@ -38,7 +38,7 @@ export function useInvoiceContract(): UseInvoiceContractReturn {
   const [cancelTx, setCancelTx] = useState<TransactionState>({ status: 'idle' });
   
   // Contract reads - using v2 API
-  const { data: userInvoiceIds, refetch: refetchUserInvoices } = useReadContract({
+  const { refetch: refetchUserInvoices } = useReadContract({
     address: MEZO_CONTRACTS.INVOICE_CONTRACT as `0x${string}`,
     abi: INVOICE_CONTRACT_ABI,
     functionName: 'getUserInvoices',
@@ -68,62 +68,36 @@ export function useInvoiceContract(): UseInvoiceContractReturn {
     },
   });
   
-  const { data: totalInvoices } = useReadContract({
+  const { data: invoiceCountData } = useReadContract({
     address: MEZO_CONTRACTS.INVOICE_CONTRACT as `0x${string}`,
     abi: INVOICE_CONTRACT_ABI,
-    functionName: 'getUserInvoiceCount',
-    args: address ? [address] : undefined,
-    query: {
-      enabled: !!address && isConnected,
-    },
+    functionName: 'invoiceCount',
   });
   
   // Contract writes - using v2 API
-  const { writeContract: createInvoiceWrite, data: createTxData } = useWriteContract();
+  const { writeContractAsync: createInvoiceWrite } = useWriteContract();
+  const { writeContractAsync: confirmPaymentWrite } = useWriteContract();
+  const { writeContractAsync: cancelInvoiceWrite } = useWriteContract();
+  const { writeContractAsync: approveInvoiceWrite } = useWriteContract();
   
-  const { writeContract: confirmPaymentWrite, data: confirmTxData } = useWriteContract();
-  
-  const { writeContract: cancelInvoiceWrite, data: cancelTxData } = useWriteContract();
-  
-  // Wait for transactions
-  const { isLoading: isCreating } = useWaitForTransactionReceipt({
-    hash: createTxData,
-      onSuccess: () => {
-        setCreateTx({ status: 'success', hash: createTxData });
-        toast.success('✅ Invoice created on blockchain successfully!');
-        refreshData();
-      },
-    onError: (error) => {
-      setCreateTx({ status: 'error', error: error.message });
-      toast.error('❌ Failed to create invoice on blockchain');
-    },
+  // Wait for transaction receipts
+  const { isLoading: isWaitingCreate } = useWaitForTransactionReceipt({
+    hash: createTx.status === 'success' && 'hash' in createTx ? (createTx.hash as `0x${string}`) : undefined,
   });
   
-  const { isLoading: isConfirming } = useWaitForTransactionReceipt({
-    hash: confirmTxData,
-    onSuccess: () => {
-      setConfirmTx({ status: 'success', hash: confirmTxData });
-      toast.success('Payment confirmed!');
-      refreshData();
-    },
-    onError: (error) => {
-      setConfirmTx({ status: 'error', error: error.message });
-      toast.error('Failed to confirm payment');
-    },
+  const { isLoading: isWaitingConfirm } = useWaitForTransactionReceipt({
+    hash: confirmTx.status === 'success' && 'hash' in confirmTx ? (confirmTx.hash as `0x${string}`) : undefined,
   });
   
-  const { isLoading: isCancelling } = useWaitForTransactionReceipt({
-    hash: cancelTxData,
-    onSuccess: () => {
-      setCancelTx({ status: 'success', hash: cancelTxData });
-      toast.success('Invoice cancelled!');
-      refreshData();
-    },
-    onError: (error) => {
-      setCancelTx({ status: 'error', error: error.message });
-      toast.error('Failed to cancel invoice');
-    },
+  const { isLoading: isWaitingCancel } = useWaitForTransactionReceipt({
+    hash: cancelTx.status === 'success' && 'hash' in cancelTx ? (cancelTx.hash as `0x${string}`) : undefined,
   });
+  
+  // Track loading states
+  const isCreating = createTx.status === 'pending' || isWaitingCreate;
+  const isConfirming = confirmTx.status === 'pending' || isWaitingConfirm;
+  const isCancelling = cancelTx.status === 'pending' || isWaitingCancel;
+  
   
   // Convert blockchain invoice to frontend invoice
   const convertBlockchainInvoice = useCallback((blockchainInvoice: BlockchainInvoice, txHash?: string): Invoice => {
@@ -131,14 +105,20 @@ export function useInvoiceContract(): UseInvoiceContractReturn {
       blockchainInvoice.cancelled ? 'cancelled' :
       blockchainInvoice.paid ? 'paid' : 'pending';
     
+    // Parse the amount from wei (stored as BTC on-chain)
+    const btcAmount = parseFloat(formatEther(BigInt(blockchainInvoice.amount)));
+    
+    // Display the originally requested amount; keep observedInboundAmount separately for transaction details
+    const displayAmount = btcAmount;
+    
     return {
       id: blockchainInvoice.id.toString(),
       clientName: blockchainInvoice.clientName,
       clientCode: blockchainInvoice.clientCode,
       details: blockchainInvoice.description,
-      amount: parseFloat(formatEther(BigInt(blockchainInvoice.amount))),
-      currency: 'USD', // Default to USD, can be enhanced later
-      musdAmount: parseFloat(formatEther(BigInt(blockchainInvoice.amount))) * 0.98, // Mock conversion
+      amount: displayAmount, // Show requested amount; actual received is tracked in observedInboundAmount
+      currency: (blockchainInvoice.currency || 'USD') as 'USD' | 'KES', // Use stored currency
+      musdAmount: displayAmount * 0.98, // Mock conversion
       status,
       createdAt: new Date(blockchainInvoice.createdAt * 1000).toISOString(),
       wallet: blockchainInvoice.bitcoinAddress,
@@ -147,6 +127,12 @@ export function useInvoiceContract(): UseInvoiceContractReturn {
       recipient: blockchainInvoice.recipient,
       paidAt: blockchainInvoice.paidAt > 0 ? new Date(blockchainInvoice.paidAt * 1000).toISOString() : undefined,
       txHash,
+      expiresAt: new Date((blockchainInvoice.expiresAt || 0) * 1000).toISOString(),
+      payToAddress: blockchainInvoice.payToAddress || blockchainInvoice.bitcoinAddress,
+      requestedAmount: blockchainInvoice.amount,
+      paymentTxHash: blockchainInvoice.paymentTxHash || undefined,
+      observedInboundAmount: blockchainInvoice.observedInboundAmount || undefined,
+      balanceAtCreation: blockchainInvoice.balanceAtCreation || undefined,
     };
   }, []);
 
@@ -159,31 +145,71 @@ export function useInvoiceContract(): UseInvoiceContractReturn {
       enabled: true, // Fetch all invoices regardless of wallet connection
     },
   });
-  
-  const { data: invoiceCountData } = useReadContract({
+
+  // Real-time: refresh on on-chain invoice events
+  useWatchContractEvent({
     address: MEZO_CONTRACTS.INVOICE_CONTRACT as `0x${string}`,
     abi: INVOICE_CONTRACT_ABI,
-    functionName: 'invoiceCount',
+    eventName: 'InvoiceCreated',
+    onLogs: () => {
+      refetchAllInvoices();
+      if (address && isConnected) refetchUserInvoices();
+      toast.success('Client has been notified');
+      try { window.dispatchEvent(new CustomEvent('notify', { detail: { title: 'Invoice created', message: 'Client has been notified' } })); } catch {}
+    }
+  });
+  useWatchContractEvent({
+    address: MEZO_CONTRACTS.INVOICE_CONTRACT as `0x${string}`,
+    abi: INVOICE_CONTRACT_ABI,
+    eventName: 'InvoicePaid',
+    onLogs: () => {
+      refetchAllInvoices();
+      if (address && isConnected) refetchUserInvoices();
+      toast.success('Payment confirmed on-chain');
+    }
+  });
+  useWatchContractEvent({
+    address: MEZO_CONTRACTS.INVOICE_CONTRACT as `0x${string}`,
+    abi: INVOICE_CONTRACT_ABI,
+    eventName: 'InvoiceCancelled',
+    onLogs: () => {
+      refetchAllInvoices();
+      if (address && isConnected) refetchUserInvoices();
+      toast('Invoice cancelled', { icon: '🛑' });
+    }
+  });
+  useWatchContractEvent({
+    address: MEZO_CONTRACTS.INVOICE_CONTRACT as `0x${string}`,
+    abi: INVOICE_CONTRACT_ABI,
+    eventName: 'InvoiceApproved',
+    onLogs: () => {
+      refetchAllInvoices();
+      if (address && isConnected) refetchUserInvoices();
+      toast.success('Invoice approved');
+    }
   });
   
-  // Fetch individual invoice details
-  const fetchInvoiceDetails = useCallback(async (invoiceId: number): Promise<BlockchainInvoice | null> => {
-    try {
-      // This would need to be implemented with a contract read
-      // For now, we'll return null and handle it in the main fetch
-      return null;
-    } catch (error) {
-      console.error('Error fetching invoice details:', error);
-      return null;
-    }
-  }, []);
+  // Note: fetchInvoiceDetails function removed as it was unused
   
   // Load drafts from localStorage on mount and when blockchain data changes
   useEffect(() => {
     const drafts = invoiceStorage.listDrafts();
     console.log('💾 Loaded drafts from localStorage:', drafts.length);
-    
-    if (allBlockchainInvoices && Array.isArray(allBlockchainInvoices)) {
+
+    // If blockchain data is temporarily unavailable (during refetch), don't clobber existing UI
+    if (!allBlockchainInvoices) {
+      // Only show drafts if we have nothing in UI yet
+      setInvoices(prev => {
+        if (prev.length === 0) {
+          console.log('📝 No blockchain invoices yet, initializing from drafts:', drafts.length);
+          return drafts;
+        }
+        return prev;
+      });
+      return;
+    }
+
+    if (Array.isArray(allBlockchainInvoices)) {
       try {
         console.log('📋 Converting invoices from blockchain:', allBlockchainInvoices.length);
         
@@ -200,7 +226,13 @@ export function useInvoiceContract(): UseInvoiceContractReturn {
             paid: invoice.paid,
             cancelled: invoice.cancelled,
             createdAt: Number(invoice.createdAt),
-            paidAt: Number(invoice.paidAt),
+            paidAt: Number(invoice.paidAt || 0),
+            expiresAt: Number(invoice.expiresAt || 0),
+            payToAddress: invoice.payToAddress || invoice.bitcoinAddress || '',
+            paymentTxHash: invoice.paymentTxHash || '',
+            observedInboundAmount: invoice.observedInboundAmount || '0',
+            currency: invoice.currency || 'USD',
+            balanceAtCreation: invoice.balanceAtCreation || '0',
           };
           
           console.log('📄 Converting invoice:', blockchainInvoice.id, 'bitcoinAddress:', blockchainInvoice.bitcoinAddress);
@@ -209,6 +241,17 @@ export function useInvoiceContract(): UseInvoiceContractReturn {
         });
         
         console.log('✅ Converted invoices:', convertedInvoices.length);
+
+        // Remove any local drafts that match blockchain invoices (avoid duplicates)
+        try {
+          const draftList = invoiceStorage.listDrafts();
+          const chainClientCodes = new Set(convertedInvoices.map(ci => ci.clientCode).filter(Boolean));
+          draftList
+            .filter(d => d.clientCode && chainClientCodes.has(d.clientCode))
+            .forEach(d => invoiceStorage.removeDraft(d.id));
+        } catch (e) {
+          console.warn('Failed to prune duplicate drafts:', e);
+        }
 
         // Merge with existing UI invoices, replacing temporary ones with real blockchain data
         setInvoices(prevInvoices => {
@@ -242,17 +285,20 @@ export function useInvoiceContract(): UseInvoiceContractReturn {
         });
         
         // Update payment history
-        const paidInvoices = convertedInvoices.filter(inv => inv.status === 'paid').map(inv => ({
-          id: inv.id,
-          type: 'received' as const,
-          counterparty: inv.clientName,
-          amount: inv.amount,
-          date: inv.paidAt || inv.createdAt,
-          status: 'confirmed' as const,
-          bitcoinAddress: inv.bitcoinAddress,
-          txHash: inv.paymentTxHash,
-        }));
-        setPaymentHistory(paidInvoices);
+        const paidInvoices = convertedInvoices
+          .filter(inv => inv.status === 'paid')
+          .map(inv => ({
+            id: `${inv.id}-ph`,
+            invoiceId: inv.id,
+            clientName: inv.clientName,
+            amount: inv.amount,
+            currency: inv.currency,
+            bitcoinAddress: inv.bitcoinAddress,
+            paidAt: inv.paidAt || inv.createdAt,
+            txHash: inv.paymentTxHash || inv.txHash || '',
+            status: 'confirmed' as const,
+          }));
+        setPaymentHistory(paidInvoices as PaymentHistory[]);
         
       } catch (error) {
         console.error('Error converting invoices:', error);
@@ -260,10 +306,6 @@ export function useInvoiceContract(): UseInvoiceContractReturn {
         // Still show drafts even if blockchain fails
         setInvoices(drafts);
       }
-    } else {
-      // If no blockchain invoices, just show drafts from localStorage
-      console.log('📝 No blockchain invoices, showing drafts only:', drafts.length);
-      setInvoices(drafts);
     }
   }, [allBlockchainInvoices, convertBlockchainInvoice]);
 
@@ -280,12 +322,12 @@ export function useInvoiceContract(): UseInvoiceContractReturn {
       }
       
       // Update stats
-      const totalCount = invoiceCountData ? Number(invoiceCountData) : 0;
+      const totalCount = invoiceCountData ? Number(invoiceCountData as unknown as bigint) : 0;
       const paidCount = invoices.filter(inv => inv.status === 'paid').length;
       
       setStats({
-        totalRevenue: totalRevenue ? parseFloat(formatEther(totalRevenue)) : 0,
-        pendingAmount: pendingAmount ? parseFloat(formatEther(pendingAmount)) : 0,
+        totalRevenue: (totalRevenue as unknown as bigint) ? parseFloat(formatEther(totalRevenue as unknown as bigint)) : 0,
+        pendingAmount: (pendingAmount as unknown as bigint) ? parseFloat(formatEther(pendingAmount as unknown as bigint)) : 0,
         totalInvoices: totalCount,
         activeInvoices: totalCount - paidCount,
         paidInvoices: paidCount,
@@ -297,7 +339,7 @@ export function useInvoiceContract(): UseInvoiceContractReturn {
     } finally {
       setIsLoading(false);
     }
-  }, [refetchAllInvoices, refetchUserInvoices, totalRevenue, pendingAmount, invoiceCountData, invoices]);
+  }, [refetchAllInvoices, refetchUserInvoices, totalRevenue, pendingAmount, invoiceCountData, invoices, address, isConnected]);
   
   // Create invoice
   const createInvoice = useCallback(async (data: InvoiceFormData) => {
@@ -334,7 +376,7 @@ export function useInvoiceContract(): UseInvoiceContractReturn {
         payToAddress: data.bitcoinAddress, // Set payToAddress for payment monitoring
         creator: address,
         recipient: address,
-        requestedAmount: data.amount,
+        requestedAmount: parseEther(data.amount).toString(),
         balanceAtCreation: data.balanceAtCreation || '0', // Use provided balance snapshot
         syncPending: true, // Will try to sync to blockchain
       };
@@ -392,6 +434,34 @@ export function useInvoiceContract(): UseInvoiceContractReturn {
           });
           
           console.log('createInvoiceWrite succeeded, transaction hash:', hash);
+          setCreateTx({ status: 'success', hash });
+          
+          // Optimistically show the invoice in UI while awaiting chain confirmation
+          setInvoices(prev => [
+            {
+              id: `pending_${Date.now()}`,
+              clientName: data.clientName,
+              clientCode,
+              details: data.details,
+              amount: parseFloat(data.amount),
+              currency: data.currency,
+              musdAmount: parseFloat(data.amount) * 0.98,
+              status: 'pending',
+              createdAt: now.toISOString(),
+              expiresAt: expiresAt.toISOString(),
+              wallet: data.bitcoinAddress,
+              bitcoinAddress: data.bitcoinAddress,
+              payToAddress: data.payToAddress || data.bitcoinAddress,
+              creator: address,
+              recipient: address,
+              txHash: hash,
+              requestedAmount: amountInWei.toString(),
+              paymentTxHash: undefined,
+              observedInboundAmount: undefined,
+              balanceAtCreation: data.balanceAtCreation || '0',
+            },
+            ...prev,
+          ]);
           // The useWaitForTransactionReceipt hook will handle the rest
           
         } catch (blockchainError) {
@@ -412,53 +482,14 @@ export function useInvoiceContract(): UseInvoiceContractReturn {
     }
   }, [address, isConnected, createInvoiceWrite]);
   
-  // Verify payment via Boar socket
-  const verifyPaymentViaBoar = useCallback(async (paymentAddress: string, expectedAmount: number) => {
+  // Verify payment via Boar using HTTP balance delta only (no WS fallback)
+  const verifyPaymentViaBoar = useCallback(async (invoice: Invoice) => {
     try {
-      console.log('🔍 Starting payment verification via Boar...');
-
-      // Subscribe to the payment address temporarily
-      const subscriptionId = `verify_${Date.now()}`;
-      const expectedAmountWei = parseEther(expectedAmount.toString());
-      paymentMonitor.subscribeToAddress({
-        address: paymentAddress,
-        invoiceId: subscriptionId,
-        expectedAmount: expectedAmountWei.toString(),
-      });
-
-      // Wait briefly to allow any recent tx notifications to arrive
-      await new Promise(resolve => setTimeout(resolve, 2000));
-
-      // Check transaction storage for recent payments to this temp subscription
-      const recentTransactions = transactionStorage.getTransactionsForInvoice(subscriptionId);
-
-      // Clean up subscription
-      paymentMonitor.unsubscribeFromAddress(paymentAddress);
-
-      if (recentTransactions.length === 0) {
-        console.log('❌ No recent transactions found');
-        return { success: false, error: 'No recent payment found' };
+      const result = await paymentMonitor.confirmInvoicePaid(invoice);
+      if (result.confirmed) {
+        return { success: true, amount: result.amount };
       }
-
-      // Require amount >= expected AND confirmations >= 1
-      const validTransaction = recentTransactions.find(tx => {
-        const receivedAmount = BigInt(tx.amount);
-        const hasSufficientAmount = receivedAmount >= expectedAmountWei;
-        const hasConfirmations = (tx.confirmations ?? 0) >= 1;
-        return hasSufficientAmount && hasConfirmations;
-      });
-
-      if (!validTransaction) {
-        // Provide specific reason if any tx had amount but lacked confirmations
-        const anyAmountOk = recentTransactions.some(tx => BigInt(tx.amount) >= expectedAmountWei);
-        if (anyAmountOk) {
-          return { success: false, error: 'Payment found but awaiting 1 confirmation' };
-        }
-        return { success: false, error: 'Payment amount is less than expected' };
-      }
-
-      console.log('✅ Payment verification successful with confirmations >= 1!');
-      return { success: true, transaction: validTransaction };
+      return { success: false, error: result.error || 'No payment detected' };
     } catch (error) {
       console.error('Error verifying payment:', error);
       return { success: false, error: 'Payment verification failed' };
@@ -469,34 +500,39 @@ export function useInvoiceContract(): UseInvoiceContractReturn {
   const confirmPayment = useCallback(async (invoiceId: string) => {
     try {
       setConfirmTx({ status: 'pending' });
+      console.log('🔄 Starting payment confirmation for invoice:', invoiceId);
       
       // Find the invoice to get payment details
       const invoice = invoices.find(inv => inv.id === invoiceId);
       if (!invoice) {
+        console.error('❌ Invoice not found:', invoiceId);
         toast.error('Invoice not found');
         setConfirmTx({ status: 'error', error: 'Invoice not found' });
         return;
       }
       
-      if (!invoice.bitcoinAddress) {
+      const paymentAddress = invoice.payToAddress || invoice.bitcoinAddress;
+      if (!paymentAddress) {
+        console.error('❌ No payment address found for invoice:', invoiceId);
         toast.error('No payment address found for this invoice');
         setConfirmTx({ status: 'error', error: 'No payment address' });
         return;
       }
       
-      // Verify payment via Boar socket
+      // Verify payment via Boar
       console.log('🔍 Verifying payment for invoice:', invoiceId);
-      console.log('   Payment address:', invoice.bitcoinAddress);
-      console.log('   Expected amount:', invoice.amount);
-      
-      const verificationResult = await verifyPaymentViaBoar(invoice.bitcoinAddress, invoice.amount);
+      console.log('   Payment address:', paymentAddress);
+      console.log('   Expected amount (BTC):', invoice.amount);
+      toast.loading('Checking payment address for incoming BTC...', { id: 'checking-payment' });
+      const verificationResult = await verifyPaymentViaBoar(invoice);
+      toast.dismiss('checking-payment');
       
       if (verificationResult.success) {
         console.log('✅ Payment verified! Marking as paid...');
         
         // For draft invoices, mark as paid locally
         if (invoiceId.startsWith('draft_')) {
-          invoiceStorage.markAsPaid(invoiceId, verificationResult.transaction?.amount, verificationResult.transaction?.txHash);
+          invoiceStorage.markAsPaid(invoiceId, verificationResult.amount, (verificationResult as any).transaction?.txHash);
           toast.success(`Payment confirmed! Invoice marked as paid.`);
           setConfirmTx({ status: 'success' });
           refreshData();
@@ -517,22 +553,60 @@ export function useInvoiceContract(): UseInvoiceContractReturn {
           return;
         }
         
-        toast.success(`Payment verified! Confirming on blockchain...`);
+        console.log('📤 Confirming payment on blockchain...');
+        toast.loading('Confirming payment on blockchain... Wallet will prompt for signature.', { id: 'confirming-blockchain' });
         
-        await confirmPaymentWrite({
-          address: MEZO_CONTRACTS.INVOICE_CONTRACT as `0x${string}`,
-          abi: INVOICE_CONTRACT_ABI,
-          functionName: 'confirmPayment',
-          args: [
-            BigInt(invoiceId),
-            verificationResult.transaction?.txHash || '',
-            verificationResult.transaction?.amount || '0'
-          ]
-        });
+        try {
+          const paymentTxHash = (verificationResult as any).transaction?.txHash || '';
+          const observedAmount = verificationResult.amount || '0';
+          
+          // Get the transaction hash from the write operation
+          const txHash = await confirmPaymentWrite({
+            address: MEZO_CONTRACTS.INVOICE_CONTRACT as `0x${string}`,
+            abi: INVOICE_CONTRACT_ABI,
+            functionName: 'confirmPayment',
+            args: [
+              BigInt(invoiceId),
+              paymentTxHash,
+              observedAmount
+            ]
+          });
+          
+          // Store transaction details immediately for Payments page
+          const paymentAddress = invoice.payToAddress || invoice.bitcoinAddress;
+          transactionStorage.addTransaction({
+            txHash: txHash || paymentTxHash || `confirm_${invoiceId}_${Date.now()}`,
+            invoiceId: invoiceId,
+            from: 'unknown',
+            to: paymentAddress || '',
+            amount: observedAmount, // Actual amount received (in wei, may be more than requested)
+            blockNumber: 0, // Will be updated when event is processed
+            timestamp: Date.now(),
+            confirmations: 1,
+            status: 'confirmed',
+          });
+          
+          console.log('✅ Transaction stored for Payments page:', {
+            txHash,
+            invoiceId,
+            amount: observedAmount,
+            paymentTxHash
+          });
+          
+          toast.dismiss('confirming-blockchain');
+          toast.success('Payment confirmed on blockchain! Transaction details saved.');
+          try { window.dispatchEvent(new CustomEvent('notify', { detail: { title: 'Invoice paid', message: `Invoice #${invoiceId} confirmed on-chain` } })); } catch {}
+          // Refresh to update Payments page immediately
+          refreshData();
+        } catch (blockchainError) {
+          toast.dismiss('confirming-blockchain');
+          console.error('❌ Blockchain confirmation error:', blockchainError);
+          throw blockchainError;
+        }
         
       } else {
         console.log('❌ Payment verification failed:', verificationResult.error);
-        toast.error(`Payment verification failed: ${verificationResult.error}`);
+        toast.error(`Payment verification failed: ${verificationResult.error || 'No payment detected. Make sure BTC was sent to the invoice address.'}`);
         setConfirmTx({ status: 'error', error: verificationResult.error });
       }
       
@@ -541,62 +615,113 @@ export function useInvoiceContract(): UseInvoiceContractReturn {
       setConfirmTx({ status: 'error', error: 'Failed to confirm payment' });
       toast.error('Failed to confirm payment');
     }
-  }, [address, isConnected, confirmPaymentWrite, invoices, refreshData]);
+  }, [address, isConnected, confirmPaymentWrite, invoices, refreshData, verifyPaymentViaBoar]);
   
   // Cancel invoice
   const cancelInvoice = useCallback(async (invoiceId: string) => {
-    if (!address || !isConnected) {
-      toast.error('Please connect your wallet');
-      return;
-    }
+    // IMMEDIATE UPDATE: Mark as cancelled in UI instantly for ALL invoice types
+    const invoice = invoices.find(inv => inv.id === invoiceId);
+    const previousStatus = invoice?.status;
+    
+    // Update UI immediately - works for both draft and on-chain
+    setInvoices(prev => prev.map(inv => 
+      inv.id === invoiceId 
+        ? { ...inv, status: 'cancelled' as const }
+        : inv
+    ));
     
     // If this is a draft invoice (not yet on-chain), mark it as cancelled locally
     if (invoiceId.startsWith('draft_')) {
       invoiceStorage.markCancelled(invoiceId);
-      setInvoices(prev => prev.map(inv => 
-        inv.id === invoiceId 
-          ? { ...inv, status: 'cancelled' }
-          : inv
-      ));
       toast.success('Invoice cancelled');
+      return; // Done for draft invoices
+    }
+
+    // For on-chain invoices, we still need wallet confirmation if connected
+    if (!address || !isConnected) {
+      toast.success('Invoice marked as cancelled locally');
+      // If wallet not connected, just keep the local update
       return;
     }
 
     if (!cancelInvoiceWrite) {
       console.error('cancelInvoiceWrite is undefined!');
       toast.error('Failed to initialize contract write');
+      // Revert on error if write unavailable
+      setInvoices(prev => prev.map(inv => 
+        inv.id === invoiceId 
+          ? { ...inv, status: (previousStatus || 'pending') }
+          : inv
+      ));
       return;
     }
     
     try {
       setCancelTx({ status: 'pending' });
+      toast.loading('Confirming cancellation on-chain... Wallet will prompt for signature.', { id: 'cancel-invoice' });
       
-      await cancelInvoiceWrite({
+      const hash = await cancelInvoiceWrite({
         address: MEZO_CONTRACTS.INVOICE_CONTRACT as `0x${string}`,
         abi: INVOICE_CONTRACT_ABI,
         functionName: 'cancelInvoice',
         args: [BigInt(invoiceId)]
       });
+      setCancelTx({ status: 'success', hash });
+      toast.dismiss('cancel-invoice');
+      toast.success('Invoice cancelled successfully on-chain');
+      // Refresh to pick up InvoiceCancelled event for final confirmation
+      refreshData();
       
     } catch (error) {
       console.error('Error cancelling invoice:', error);
       setCancelTx({ status: 'error', error: 'Failed to cancel invoice' });
-      toast.error('Failed to cancel invoice');
+      toast.dismiss('cancel-invoice');
+      toast.error('Failed to cancel invoice on-chain');
+      // Revert optimistic update on error
+      setInvoices(prev => prev.map(inv => 
+        inv.id === invoiceId 
+          ? { ...inv, status: (previousStatus || 'pending') }
+          : inv
+      ));
     }
-  }, [address, isConnected, cancelInvoiceWrite]);
+  }, [address, isConnected, cancelInvoiceWrite, invoices]);
+
+  // Approve invoice (Board role)
+  const approveInvoice = useCallback(async (invoiceId: string) => {
+    if (!address || !isConnected) {
+      toast.error('Please connect your wallet');
+      return;
+    }
+    if (!approveInvoiceWrite) {
+      toast.error('Failed to initialize contract write');
+      return;
+    }
+    try {
+      await approveInvoiceWrite({
+        address: MEZO_CONTRACTS.INVOICE_CONTRACT as `0x${string}`,
+        abi: INVOICE_CONTRACT_ABI,
+        functionName: 'approveInvoice',
+        args: [BigInt(invoiceId)],
+      });
+      toast.success('Approval transaction sent');
+    } catch (error) {
+      console.error('Error approving invoice:', error);
+      toast.error('Failed to approve invoice');
+    }
+  }, [address, isConnected, approveInvoiceWrite]);
   
   // Clear error
   const clearError = useCallback(() => {
     setError(null);
   }, []);
   
-  // Manual confirmation only - no automatic payment detection
+  // Manual confirmation only - notify on detection, user clicks Mark as Paid to confirm
   useEffect(() => {
-    const handlePaymentDetected = (event: PaymentEvent) => {
+    const handlePaymentDetected = async (event: PaymentEvent) => {
       if (event.type === 'payment_detected' && event.transaction) {
         console.log('💰 Payment detected event received for invoice:', event.invoiceId);
-        console.log('   Note: Manual confirmation required - no auto-confirmation');
-        // Just log the payment detection, don't auto-confirm
+        toast.success('Client payment detected. Click "Mark as Paid" to confirm.');
+        try { window.dispatchEvent(new CustomEvent('notify', { detail: { title: 'Payment detected', message: 'Click Mark as Paid to confirm' } })); } catch {}
       }
     };
 
@@ -628,15 +753,17 @@ export function useInvoiceContract(): UseInvoiceContractReturn {
       console.log('Invoice:', invoice.id, 'Status:', invoice.status, 'BitcoinAddr:', invoice.bitcoinAddress);
       
       // Monitor if invoice is pending and has bitcoinAddress (for manual verification)
-      if (invoice.status === 'pending' && invoice.bitcoinAddress) {
-        console.log('👀 Monitoring for manual verification - invoice:', invoice.id, 'Payment address:', invoice.bitcoinAddress);
-        
+      const payAddr = (invoice.payToAddress || invoice.bitcoinAddress || '').trim();
+      const isEvmAddress = /^0x[a-fA-F0-9]{40}$/.test(payAddr);
+      if (invoice.status === 'pending' && isEvmAddress) {
+        console.log('👀 Monitoring for manual verification - invoice:', invoice.id, 'Payment address:', payAddr);
+
         // Calculate expected amount in wei
         const expectedAmount = invoice.amount ? parseEther(invoice.amount.toString()).toString() : undefined;
-        
-        // Subscribe to monitor the invoice's bitcoinAddress (payment recipient)
+
+        // Subscribe to monitor the invoice's payToAddress (preferred) or bitcoinAddress
         paymentMonitor.subscribeToAddress({
-          address: invoice.bitcoinAddress,
+          address: payAddr,
           invoiceId: invoice.id,
           expectedAmount: expectedAmount,
         });
@@ -670,7 +797,7 @@ export function useInvoiceContract(): UseInvoiceContractReturn {
           ...latestDraft,
           id: `blockchain_${Date.now()}`, // Temporary ID until we get real blockchain ID
           status: 'pending',
-          syncPending: false, // Mark as synced since it's on blockchain
+            // synced on blockchain
         };
         
         // Add to UI immediately
@@ -679,6 +806,9 @@ export function useInvoiceContract(): UseInvoiceContractReturn {
         // Remove the draft from localStorage since it's now on blockchain
         invoiceStorage.removeDraft(latestDraft.id);
         
+        // Notify that client has been notified (assumes invoice delivery)
+        toast.success('Client has been notified');
+
         // Refresh blockchain data to get the real blockchain invoice (will replace the temporary one)
         refetchAllInvoices();
       }
@@ -698,7 +828,7 @@ export function useInvoiceContract(): UseInvoiceContractReturn {
   // Load data on mount
   useEffect(() => {
     refreshData();
-  }, []);
+  }, [refreshData]);
   
   return {
     // Data
@@ -721,6 +851,7 @@ export function useInvoiceContract(): UseInvoiceContractReturn {
     createInvoice,
     confirmPayment,
     cancelInvoice,
+    approveInvoice,
     refreshData,
     
     // Error handling

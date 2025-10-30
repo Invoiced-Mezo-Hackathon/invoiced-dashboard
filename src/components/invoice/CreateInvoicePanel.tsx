@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAccount } from 'wagmi';
-import { Send, Plus, X } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { InvoiceQRModal } from './InvoiceQRModal';
+import { boarRPC } from '@/services/boar-rpc';
+import type { Invoice } from '@/types/invoice';
 import { useInvoiceContract } from '@/hooks/useInvoiceContract';
-import { parseEther } from 'viem';
 
 interface CreateInvoicePanelProps {
   onInvoiceCreated?: () => void;
@@ -12,7 +13,7 @@ interface CreateInvoicePanelProps {
 }
 
 export function CreateInvoicePanel({ onInvoiceCreated }: CreateInvoicePanelProps = {}) {
-  const { address, isConnected } = useAccount();
+  const { isConnected, address } = useAccount();
   const { createInvoice: createBlockchainInvoice, isCreating } = useInvoiceContract();
   
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -23,7 +24,7 @@ export function CreateInvoicePanel({ onInvoiceCreated }: CreateInvoicePanelProps
   const [btcInput, setBtcInput] = useState('');
   const [bitcoinAddress, setBitcoinAddress] = useState('');
   const [showQRModal, setShowQRModal] = useState(false);
-  const [createdInvoice, setCreatedInvoice] = useState<any>(null);
+  const [createdInvoice, setCreatedInvoice] = useState<Invoice | null>(null);
   const [bitcoinPrice, setBitcoinPrice] = useState<number>(0);
   const [isLoadingPrice, setIsLoadingPrice] = useState(true);
   const [inputCurrency, setInputCurrency] = useState<'USD' | 'BTC'>('USD');
@@ -72,6 +73,13 @@ export function CreateInvoicePanel({ onInvoiceCreated }: CreateInvoicePanelProps
     };
   }, [isDropdownOpen]);
 
+  // Auto-fill Mezo testnet address from connected wallet
+  useEffect(() => {
+    if (address) {
+      setBitcoinAddress(address);
+    }
+  }, [address]);
+
   // Auto-generate client code when name changes
   useEffect(() => {
     if (clientName.length > 0) {
@@ -93,12 +101,6 @@ export function CreateInvoicePanel({ onInvoiceCreated }: CreateInvoicePanelProps
   const bitcoinAmount = getBitcoinAmount();
   
   // Calculate display amounts based on input currency
-  const getDisplayBitcoinAmount = () => {
-    if (inputCurrency === 'USD') return bitcoinAmount;
-    const parsed = parseFloat(btcInput || '0');
-    return isNaN(parsed) ? 0 : parsed;
-  };
-  
   const getDisplayUsdAmount = () => {
     if (inputCurrency === 'BTC') {
       const parsed = parseFloat(btcInput || '0');
@@ -108,7 +110,6 @@ export function CreateInvoicePanel({ onInvoiceCreated }: CreateInvoicePanelProps
     return isNaN(parsed) ? 0 : parsed;
   };
   
-  const displayBitcoinAmount = getDisplayBitcoinAmount();
   const displayUsdAmount = getDisplayUsdAmount();
 
   // Validate Mezo testnet address (Ethereum-compatible addresses)
@@ -155,19 +156,24 @@ export function CreateInvoicePanel({ onInvoiceCreated }: CreateInvoicePanelProps
     }
     
     try {
-      // Convert BTC to wei for smart contract
-      const amountInWei = parseEther(finalBitcoinAmount.toString());
-      
-      // Generate client code
-      const clientCode = `CLT-${clientName.substring(0, 3).toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`;
-      
-      // Call smart contract
+      // Snapshot current balance at the payment address for verification later
+      let balanceAtCreation = '0';
+      try {
+        const snapshot = await boarRPC.getAddressBalance(bitcoinAddress);
+        balanceAtCreation = String(snapshot.balance || '0');
+      } catch (e) {
+        console.warn('Failed to snapshot balance at creation, proceeding with 0:', e);
+      }
+
+      // Call smart contract - store the original currency and BTC amount
       await createBlockchainInvoice({
         clientName,
         details,
-        amount: finalBitcoinAmount.toString(),
-        currency: 'USD',
+        amount: finalBitcoinAmount.toString(), // Always BTC amount for on-chain storage
+        currency: inputCurrency, // Store the original currency (USD or BTC)
         bitcoinAddress,
+        payToAddress: bitcoinAddress,
+        balanceAtCreation,
       });
 
       // Reset form
@@ -332,8 +338,8 @@ export function CreateInvoicePanel({ onInvoiceCreated }: CreateInvoicePanelProps
                     </p>
                     <p className="text-xs text-white/60 mt-1 font-navbar">
                       {isLoadingPrice ? (
-                        <span className="flex items-center gap-1">
-                          <div className="w-3 h-3 border border-green-400 border-t-transparent rounded-full animate-spin"></div>
+                    <span className="flex items-center gap-1">
+                          <span className="w-3 h-3 border border-green-400 border-t-transparent rounded-full animate-spin inline-block"></span>
                           Loading Bitcoin price...
                         </span>
                       ) : (
@@ -344,10 +350,10 @@ export function CreateInvoicePanel({ onInvoiceCreated }: CreateInvoicePanelProps
                 )}
               </div>
 
-              {/* Mezo Testnet Address */}
+              {/* Wallet Address */}
               <div>
                 <label className="block text-sm font-medium text-white/80 mb-2 font-navbar">
-                  Mezo Testnet Address *
+                  Wallet Address *
                 </label>
                 <input
                   type="text"
@@ -355,9 +361,10 @@ export function CreateInvoicePanel({ onInvoiceCreated }: CreateInvoicePanelProps
                   onChange={(e) => setBitcoinAddress(e.target.value)}
                   className="w-full px-4 py-3 bg-[#2C2C2E]/40 backdrop-blur-xl border border-green-400/20 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent font-navbar"
                   placeholder="0x1234567890123456789012345678901234567890"
+                  readOnly={!!address}
                 />
                 <p className="text-xs text-white/60 mt-1 font-navbar">
-                  Enter your Mezo testnet address to receive Bitcoin payments
+                  {address ? 'Auto detected' : 'Enter wallet address to receive payments'}
                 </p>
               </div>
 

@@ -1,14 +1,16 @@
-import { useState } from 'react';
-import { X, CheckCircle, XCircle, QrCode, Eye, Clock } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { X, CheckCircle, XCircle, QrCode, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { InvoiceQRModal } from '@/components/invoice/InvoiceQRModal';
 import { CreateInvoicePanel } from '@/components/invoice/CreateInvoicePanel';
-import { useInvoicePaymentMonitor } from '@/hooks/usePaymentMonitor';
-import { TransactionDetailsModal } from '@/components/TransactionDetailsModal';
+// import { useInvoicePaymentMonitor } from '@/hooks/usePaymentMonitor';
 import { useInvoiceContract } from '@/hooks/useInvoiceContract';
 import { useCountdown } from '@/hooks/useCountdown';
 import { Invoice as InvoiceType } from '@/types/invoice';
+import type { StoredTransaction } from '@/services/transaction-storage';
+import toast from 'react-hot-toast';
+import { invoiceStorage } from '@/services/invoice-storage';
 
 interface Invoice {
   id: string;
@@ -35,28 +37,62 @@ export function Invoices({ invoices }: InvoicesProps) {
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [showQRModal, setShowQRModal] = useState(false);
   const [qrInvoice, setQrInvoice] = useState<Invoice | null>(null);
-  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'paid' | 'cancelled'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'paid' | 'cancelled' | 'expired'>('all');
   const [showCancelConfirm, setShowCancelConfirm] = useState<Invoice | null>(null);
-  const [showTransactionModal, setShowTransactionModal] = useState(false);
-  const [selectedTransaction, setSelectedTransaction] = useState<any>(null);
+  const [bitcoinPrice, setBitcoinPrice] = useState<number>(0);
+  const [isLoadingPrice, setIsLoadingPrice] = useState<boolean>(false);
 
-  // Filter invoices based on status
-  const filteredInvoices = invoices.filter(invoice => {
-    if (statusFilter === 'all') return true;
-    return invoice.status === statusFilter;
-  });
+  useEffect(() => {
+    let cancelled = false;
+    const fetchPrice = async () => {
+      try {
+        setIsLoadingPrice(true);
+        const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd');
+        const data = await res.json();
+        if (!cancelled) setBitcoinPrice(data.bitcoin.usd || 0);
+      } catch {
+        if (!cancelled) setBitcoinPrice(0);
+      } finally {
+        if (!cancelled) setIsLoadingPrice(false);
+      }
+    };
+    fetchPrice();
+    const interval = setInterval(fetchPrice, 30000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, []);
+
+  // Compute derived status for expiry and filter accordingly
+  const filteredInvoices = useMemo(() => {
+    const now = Date.now();
+    const withDerived = invoices.map(inv => {
+      const isExpired = inv.expiresAt ? new Date(inv.expiresAt).getTime() <= now : false;
+      const derivedStatus = inv.status === 'pending' && isExpired ? 'expired' : inv.status;
+      return { ...inv, status: derivedStatus } as InvoiceType & { status: 'pending' | 'paid' | 'cancelled' | 'expired' };
+    });
+    if (statusFilter === 'all') return withDerived;
+    return withDerived.filter(inv => inv.status === statusFilter);
+  }, [invoices, statusFilter]);
 
   const handleMarkAsPaid = async () => {
     if (selectedInvoice) {
-      await confirmPayment(selectedInvoice.id);
-      setSelectedInvoice(null);
-      refreshData();
+      toast.loading('Verifying payment...', { id: 'verify-payment' });
+      try {
+        await confirmPayment(selectedInvoice.id);
+        toast.dismiss('verify-payment');
+        toast.success('Invoice has been paid successfully');
+        setSelectedInvoice(null);
+        refreshData();
+      } catch (error) {
+        toast.dismiss('verify-payment');
+        console.error('Error marking as paid:', error);
+      }
     }
   };
 
   const handleCancel = async () => {
     if (selectedInvoice) {
       await cancelInvoice(selectedInvoice.id);
+      toast.success('Invoice cancelled');
       setSelectedInvoice(null);
       refreshData();
     }
@@ -68,15 +104,7 @@ export function Invoices({ invoices }: InvoicesProps) {
     setShowQRModal(true);
   };
 
-  const handleShowTransaction = (invoice: InvoiceType, e: React.MouseEvent) => {
-    e.stopPropagation();
-    // Get transaction details for this invoice
-    const { transactions } = useInvoicePaymentMonitor(invoice.id, invoice.bitcoinAddress || '');
-    if (transactions.length > 0) {
-      setSelectedTransaction(transactions[0]);
-      setShowTransactionModal(true);
-    }
-  };
+  
 
   return (
     <div className="flex-1 h-screen overflow-y-auto p-4 sm:p-6 lg:p-8">
@@ -93,7 +121,7 @@ export function Invoices({ invoices }: InvoicesProps) {
       {/* Status Filter */}
       <div className="mb-6">
         <div className="flex flex-wrap gap-2">
-          {(['all', 'pending', 'paid', 'cancelled'] as const).map((status) => (
+          {(['all', 'pending', 'paid', 'cancelled', 'expired'] as const).map((status) => (
             <button
               key={status}
               onClick={() => setStatusFilter(status)}
@@ -138,15 +166,7 @@ export function Invoices({ invoices }: InvoicesProps) {
                 >
                   <QrCode className="w-4 h-4 text-white" />
                 </button>
-                {invoice.status === 'paid' && (
-                  <button
-                    onClick={(e) => handleShowTransaction(invoice, e)}
-                    className="w-8 h-8 rounded-lg border border-green-400/30 bg-green-500/10 hover:bg-green-500/20 transition-all flex items-center justify-center"
-                    title="View Transaction Details"
-                  >
-                    <Eye className="w-4 h-4 text-white" />
-                  </button>
-                )}
+                
                 {invoice.status === 'pending' && (
                   <button
                     onClick={(e) => {
@@ -164,7 +184,8 @@ export function Invoices({ invoices }: InvoicesProps) {
                     "px-3 py-1 rounded-full text-xs font-navbar font-medium border",
                     invoice.status === 'paid' && "bg-green-500/10 text-green-400 border-green-400/20",
                     invoice.status === 'pending' && "bg-yellow-500/10 text-yellow-400 border-yellow-400/20",
-                    invoice.status === 'cancelled' && "bg-red-500/10 text-red-400 border-red-400/20"
+                    invoice.status === 'cancelled' && "bg-red-500/10 text-red-400 border-red-400/20",
+                    (invoice as any).status === 'expired' && "bg-gray-500/10 text-gray-300 border-gray-400/20"
                   )}
                 >
                   {invoice.status}
@@ -174,17 +195,42 @@ export function Invoices({ invoices }: InvoicesProps) {
             
             <div className="flex items-center justify-between mb-4">
               <div>
-                <p className="text-2xl font-bold font-navbar mb-1 text-white">
-                  {invoice.amount.toFixed(8)} BTC
-                </p>
-                <p className="text-sm font-navbar text-white/60">${invoice.musdAmount.toFixed(2)} USD</p>
+                {invoice.currency === 'BTC' ? (
+                  <>
+                    <p className="text-2xl font-bold font-navbar mb-1 text-white">
+                      {invoice.amount.toFixed(8)} BTC
+                    </p>
+                    <p className="text-sm font-navbar text-white/60">
+                      {isLoadingPrice ? 'Loading USD...' : `$${(invoice.amount * (bitcoinPrice || 0)).toFixed(2)} USD`}
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-2xl font-bold font-navbar mb-1 text-white">
+                      ${(invoice.amount * (bitcoinPrice || 0)).toFixed(2)} USD
+                    </p>
+                    <p className="text-sm font-navbar text-white/60">
+                      {invoice.amount.toFixed(8)} BTC
+                    </p>
+                  </>
+                )}
               </div>
               <div className="text-right">
                 <p className="text-xs font-navbar text-white/50 mb-1">Created</p>
                 <p className="text-sm font-navbar text-white/70">{new Date(invoice.createdAt).toLocaleDateString()}</p>
                 {/* Timer for pending invoices */}
                 {invoice.status === 'pending' && invoice.expiresAt && (
-                  <InvoiceTimer expiresAt={invoice.expiresAt} />
+                  <InvoiceTimer 
+                    expiresAt={invoice.expiresAt} 
+                    onExpire={() => {
+                      // Toast for any invoice reaching expiry
+                      toast.error('Invoice expired');
+                      // For local drafts, persist expired state
+                      if (invoice.id.startsWith('draft_')) {
+                        invoiceStorage.markAsExpired(invoice.id);
+                      }
+                    }}
+                  />
                 )}
               </div>
             </div>
@@ -250,14 +296,29 @@ export function Invoices({ invoices }: InvoicesProps) {
                   <label className="block text-sm font-medium text-white/80 mb-2">Client Code</label>
                   <p className="text-white">{selectedInvoice.clientCode}</p>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-white/80 mb-2">Bitcoin Amount</label>
-                  <p className="text-white">{selectedInvoice.amount.toFixed(8)} BTC</p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-white/80 mb-2">USD Equivalent</label>
-                  <p className="text-white">${selectedInvoice.musdAmount.toFixed(2)} USD</p>
-                </div>
+                {selectedInvoice.currency === 'BTC' ? (
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-white/80 mb-2">Amount</label>
+                      <p className="text-white">{selectedInvoice.amount.toFixed(8)} BTC</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-white/80 mb-2">USD Equivalent</label>
+                      <p className="text-white">${(selectedInvoice.amount * (bitcoinPrice || 0)).toFixed(2)} USD</p>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-white/80 mb-2">Amount</label>
+                      <p className="text-white">${(selectedInvoice.amount * (bitcoinPrice || 0)).toFixed(2)} USD</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-white/80 mb-2">Bitcoin Equivalent</label>
+                      <p className="text-white">{selectedInvoice.amount.toFixed(8)} BTC</p>
+                    </div>
+                  </>
+                )}
                 <div>
                   <label className="block text-sm font-medium text-white/80 mb-2">Status</label>
                   <span
@@ -283,18 +344,25 @@ export function Invoices({ invoices }: InvoicesProps) {
                 <p className="text-white">{selectedInvoice.details}</p>
               </div>
 
-              {/* Mezo Testnet Address */}
-              {selectedInvoice.bitcoinAddress && (
+              {/* Receiving address */}
+              {(selectedInvoice as any).payToAddress || selectedInvoice.bitcoinAddress ? (
                 <div>
-                  <label className="block text-sm font-medium text-white/80 mb-2">Mezo Testnet Address</label>
+                  <div className="flex items-center gap-2 mb-2">
+                    <label className="block text-sm font-medium text-white/80">Receiving address</label>
+                    {selectedInvoice.status === 'paid' && (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-500/20 text-green-400 border border-green-400/30 font-navbar">auto-detected</span>
+                    )}
+                  </div>
                   <div className="p-3 bg-white/5 rounded-xl">
-                    <p className="text-white font-mono text-sm break-all">{selectedInvoice.bitcoinAddress}</p>
+                    <p className="text-white font-mono text-sm break-all">{(selectedInvoice as any).payToAddress || selectedInvoice.bitcoinAddress}</p>
                   </div>
                 </div>
-              )}
+              ) : null}
+
+              {/* Dev payment debug removed for cleaner UX */}
 
               {/* Actions */}
-              {selectedInvoice.status === 'pending' && (
+              {selectedInvoice.status === 'pending' && new Date(selectedInvoice.expiresAt).getTime() > Date.now() && (
                 <div className="flex gap-3 pt-4 border-t border-white/10">
                   <Button
                     onClick={handleMarkAsPaid}
@@ -313,6 +381,7 @@ export function Invoices({ invoices }: InvoicesProps) {
                   </Button>
                 </div>
               )}
+              {/* Approval step removed; paid is final for UX simplicity */}
             </div>
           </div>
         </div>
@@ -360,8 +429,14 @@ export function Invoices({ invoices }: InvoicesProps) {
               </Button>
               <Button
                 onClick={async () => {
-                  await cancelInvoice(showCancelConfirm.id);
-                  setShowCancelConfirm(null);
+                  try {
+                    // Optimistically close modal immediately (UI already updated)
+                    setShowCancelConfirm(null);
+                    await cancelInvoice(showCancelConfirm.id);
+                  } catch (error) {
+                    console.error('Error cancelling invoice:', error);
+                    // Don't reopen modal on error, let toast handle it
+                  }
                 }}
                 className="flex-1 bg-red-500 hover:bg-red-600 flex items-center gap-2"
               >
@@ -380,12 +455,7 @@ export function Invoices({ invoices }: InvoicesProps) {
         onClose={() => setShowQRModal(false)}
       />
 
-      {/* Transaction Details Modal */}
-      <TransactionDetailsModal
-        isOpen={showTransactionModal}
-        onClose={() => setShowTransactionModal(false)}
-        transaction={selectedTransaction}
-      />
+      
     </div>
   );
 }

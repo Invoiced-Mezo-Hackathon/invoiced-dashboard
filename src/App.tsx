@@ -9,6 +9,7 @@ import { Invoices } from '@/pages/Invoices';
 import { Payments } from '@/pages/Payments';
 import { Vault } from '@/pages/Vault';
 import { Settings } from '@/pages/Settings';
+import { Analytics } from '@/pages/Analytics';
 import { useWalletUtils } from '@/hooks/useWalletUtils';
 import { useNetworkNotifications } from '@/hooks/useNetworkNotifications';
 import { useInvoiceContract } from '@/hooks/useInvoiceContract';
@@ -42,8 +43,25 @@ function App() {
     return () => clearInterval(interval);
   }, []);
 
-  // Combine blockchain invoices with local invoices
-  const allInvoices = [...invoices, ...localInvoices];
+  // Combine blockchain invoices with local invoices safely (avoid duplicates)
+  const allInvoices = (() => {
+    // Build a set of blockchain client codes for de-duplication
+    const chainClientCodes = new Set<string>(
+      invoices.map(i => i.clientCode).filter(Boolean) as string[]
+    );
+
+    // Only include drafts that are not already on-chain (match by clientCode)
+    // and are still pending sync
+    const filteredDrafts = localInvoices.filter(d => {
+      const notOnChain = d.clientCode ? !chainClientCodes.has(d.clientCode) : true;
+      const isPending = (d as any).syncPending !== false; // default to true if undefined
+      return notOnChain && isPending;
+    });
+
+    // Merge lists and sort by createdAt (newest first)
+    const merged = [...invoices, ...filteredDrafts];
+    return merged.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  })();
   
   // Enable network notifications
   useNetworkNotifications();
@@ -75,6 +93,8 @@ function App() {
         return <Vault />;
       case 'settings':
         return <Settings />;
+      case 'analytics':
+        return <Analytics invoices={allInvoices} />;
       default:
         return <Dashboard onNavigate={setActiveTab} invoices={allInvoices} stats={stats} />;
     }

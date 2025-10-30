@@ -2,12 +2,12 @@ import { expect } from "chai";
 import { ethers } from "hardhat";
 
 describe("InvoiceContract", function () {
-  let invoiceContract: any;
-  let owner: any;
-  let recipient: any;
+  let invoiceContract: unknown;
+  let recipient: unknown;
 
   beforeEach(async function () {
-    [owner, recipient] = await ethers.getSigners();
+    const [, recipientSigner] = await ethers.getSigners();
+    recipient = recipientSigner;
     
     const InvoiceContract = await ethers.getContractFactory("InvoiceContract");
     invoiceContract = await InvoiceContract.deploy();
@@ -25,13 +25,13 @@ describe("InvoiceContract", function () {
     );
     
     const receipt = await tx.wait();
-    expect(receipt).to.not.be.null;
+    void expect(receipt).to.not.be.null;
     
-    const invoice = await invoiceContract.getInvoice(1);
-    expect(invoice.recipient).to.equal(recipient.address);
-    expect(invoice.amount).to.equal(amount);
-    expect(invoice.description).to.equal(description);
-    expect(invoice.paid).to.be.false;
+    const invoice = await (invoiceContract as { getInvoice: (id: number) => Promise<unknown> }).getInvoice(1);
+    void expect((invoice as { recipient: string }).recipient).to.equal((recipient as { address: string }).address);
+    void expect((invoice as { amount: bigint }).amount).to.equal(amount);
+    void expect((invoice as { description: string }).description).to.equal(description);
+    void expect((invoice as { paid: boolean }).paid).to.be.false;
   });
 
   it("Should pay an invoice", async function () {
@@ -39,18 +39,18 @@ describe("InvoiceContract", function () {
     const description = "Test invoice";
     
     // Create invoice
-    await invoiceContract.createInvoice(
-      recipient.address,
+    await (invoiceContract as { createInvoice: (recipient: string, amount: bigint, description: string) => Promise<unknown> }).createInvoice(
+      (recipient as { address: string }).address,
       amount,
       description
     );
     
     // Pay invoice
-    const tx = await invoiceContract.payInvoice(1, { value: amount });
+    const tx = await (invoiceContract as { payInvoice: (id: number, options: { value: bigint }) => Promise<unknown> }).payInvoice(1, { value: amount });
     const receipt = await tx.wait();
-    expect(receipt).to.not.be.null;
+    void expect(receipt).to.not.be.null;
     
-    const invoice = await invoiceContract.getInvoice(1);
-    expect(invoice.paid).to.be.true;
+    const invoice = await (invoiceContract as { getInvoice: (id: number) => Promise<unknown> }).getInvoice(1);
+    void expect((invoice as { paid: boolean }).paid).to.be.true;
   });
 });

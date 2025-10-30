@@ -6,6 +6,7 @@ import { transactionStorage, StoredTransaction } from './transaction-storage';
 import { boarRPC } from './boar-rpc';
 import { invoiceStorage } from './invoice-storage';
 import { Invoice } from '@/types/invoice';
+import { parseEther } from 'viem';
 
 export interface PaymentEvent {
   type: 'payment_detected' | 'payment_confirmed' | 'connection_status';
@@ -95,16 +96,28 @@ class PaymentMonitorService {
         return;
       }
       
-      const message: BoarMessage = JSON.parse(data);
+      const parsed = JSON.parse(data);
       
+      // Check if it's a JSON-RPC error
+      if (parsed.error) {
+        // Ignore subscription format errors for now - Boar might not support eth_subscribe
+        if (parsed.error.code === -32600) {
+          console.log('📨 Boar subscription attempt returned error (Boar uses custom format):', parsed.error.message);
+          return;
+        }
+        console.error('🚨 Boar WebSocket error:', parsed.error);
+        return;
+      }
+      
+      const message: BoarMessage = parsed;
       if (!message.type) {
-        console.log('📨 Received message without type:', data);
+        console.log('📨 Received message without type (may be subscription confirmation):', data.substring(0, 200));
         return;
       }
       
       switch (message.type) {
         case 'transaction':
-          this.handleTransaction(message.data);
+          this.handleTransaction(message.data as BoarTransaction);
           break;
         case 'block':
           this.handleBlock(message.data);
@@ -190,13 +203,13 @@ class PaymentMonitorService {
   }
 
   // Handle new block notifications
-  private handleBlock(blockData: any): void {
+  private handleBlock(blockData: unknown): void {
     // Update confirmation counts for pending transactions
     const pendingTransactions = transactionStorage.getAllTransactions()
       .filter(tx => tx.status === 'pending');
     
     pendingTransactions.forEach(tx => {
-      const confirmations = blockData.number - tx.blockNumber + 1;
+      const confirmations = (blockData as { number: number }).number - tx.blockNumber + 1;
       transactionStorage.updateTransactionConfirmations(tx.txHash, confirmations);
       
       if (confirmations >= 1) {
@@ -206,13 +219,19 @@ class PaymentMonitorService {
   }
 
   // Handle error messages
-  private handleError(errorData: any): void {
+  private handleError(errorData: unknown): void {
     console.error('🚨 Boar API error:', errorData);
-    this.notifyError(new BoarError(errorData.message || 'Unknown error', errorData.code || 'UNKNOWN_ERROR', errorData));
+    this.notifyError(new BoarError((errorData as { message?: string }).message || 'Unknown error', (errorData as { code?: string }).code || 'UNKNOWN_ERROR', errorData));
   }
 
   // Subscribe to monitor an address
   subscribeToAddress(subscription: AddressSubscription): void {
+    // Validate EVM address format to avoid provider errors
+    const isEvmAddress = typeof subscription.address === 'string' && /^0x[a-fA-F0-9]{40}$/.test(subscription.address);
+    if (!isEvmAddress) {
+      console.warn('⚠️ Skipping subscription: invalid EVM address for Mezo testnet', subscription.address);
+      return;
+    }
     console.log('👀 SUBSCRIBING to Mezo testnet address:', subscription.address, 'for invoice:', subscription.invoiceId);
     console.log('   Current connection status:', this.isConnected);
     console.log('   Active subscriptions before:', this.subscriptions.size);
@@ -244,12 +263,24 @@ class PaymentMonitorService {
 
   // Send subscription request
   private sendSubscription(address: string): void {
+    const isEvmAddress = typeof address === 'string' && /^0x[a-fA-F0-9]{40}$/.test(address);
+    if (!isEvmAddress) {
+      console.warn('⚠️ Not sending subscription for invalid EVM address:', address);
+      return;
+    }
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      const message: BoarMessage = {
-        type: 'subscribe',
-        address: address,
+      // Try JSON-RPC format for Boar WebSocket
+      const subscriptionId = Date.now();
+      const message = {
+        jsonrpc: '2.0',
+        id: subscriptionId,
+        method: 'eth_subscribe',
+        params: ['logs', {
+          address: address,
+        }],
       };
       console.log('📡 Subscribing to Mezo testnet address:', address);
+      console.log('   Subscription message:', JSON.stringify(message));
       this.ws.send(JSON.stringify(message));
     }
   }
@@ -373,16 +404,8 @@ class PaymentMonitorService {
       console.log('🔍 Invoice expiresAt:', invoice.expiresAt);
       console.log('🔍 Invoice type:', typeof invoice.payToAddress);
       
-      // Check if Boar is connected before attempting verification
-      console.log('🔍 Boar connection status:', this.isConnected);
-      console.log('🔍 Boar WebSocket state:', this.ws?.readyState);
-      
-      if (!this.isConnected) {
-        console.log('❌ Boar Network not connected, cannot verify payment');
-        return { confirmed: false, amount: '0', error: 'Boar Network not connected. Please wait for connection.' };
-      }
-      
-      console.log('✅ Boar Network is connected, proceeding with payment verification');
+      // Proceed with HTTP balance verification regardless of WebSocket status
+      console.log('🔍 Proceeding with HTTP balance verification (WS status not required)');
       
       // Use payToAddress if available, otherwise fall back to bitcoinAddress
       let paymentAddress = invoice.payToAddress || invoice.bitcoinAddress;
@@ -398,6 +421,13 @@ class PaymentMonitorService {
       // Trim whitespace and ensure it's a string
       paymentAddress = String(paymentAddress).trim();
       
+      // Validate EVM address for Mezo testnet
+      const isEvmAddress = /^0x[a-fA-F0-9]{40}$/.test(paymentAddress);
+      if (!isEvmAddress) {
+        console.log('❌ Payment address is not a valid EVM address for Mezo:', paymentAddress);
+        return { confirmed: false, amount: '0', error: 'Invalid Mezo address' };
+      }
+
       console.log('🔍 Using payment address:', paymentAddress);
       
       // Check if invoice is still valid (not expired)
@@ -409,7 +439,7 @@ class PaymentMonitorService {
         return { confirmed: false, amount: '0', error: 'Invoice has expired' };
       }
 
-      // Get current balance for the payment address
+      // Get current balance for the payment address via HTTP RPC
       console.log('🔍 Calling Boar RPC to get balance for address:', paymentAddress);
       const balance = await boarRPC.getAddressBalance(paymentAddress);
       const currentBalance = BigInt(balance.balance);
@@ -418,88 +448,132 @@ class PaymentMonitorService {
       console.log('💰 Current balance for', paymentAddress, ':', balance.balance);
       console.log('💰 Current balance (BigInt):', currentBalance.toString());
       
+      // Try to get recent transactions to detect incoming payments (even if balance hasn't updated yet)
+      let detectedPaymentAmount = 0n;
+      try {
+        console.log('🔍 Checking transaction history for incoming payments...');
+        const transactions = await boarRPC.getAddressTransactions(paymentAddress);
+        console.log('📝 Found transactions:', transactions.length);
+        
+        // Filter for transactions TO this address (incoming)
+        const incomingTxs = transactions.filter(tx => tx.to?.toLowerCase() === paymentAddress.toLowerCase() && BigInt(tx.value || '0') > 0n);
+        console.log('💰 Incoming transactions:', incomingTxs.length);
+        
+        if (incomingTxs.length > 0) {
+          // Sum up all incoming transactions
+          detectedPaymentAmount = incomingTxs.reduce((sum, tx) => sum + BigInt(tx.value || '0'), 0n);
+          console.log('💰 Total detected from transactions:', detectedPaymentAmount.toString());
+        }
+      } catch (txError) {
+        console.warn('⚠️ Could not fetch transaction history (may not be supported):', txError);
+      }
+      
       // If we have a balance snapshot from creation, compare
-      if (invoice.balanceAtCreation) {
-        const creationBalance = BigInt(invoice.balanceAtCreation);
-        const balanceIncrease = currentBalance - creationBalance;
-        
-        console.log('📊 ===== BALANCE COMPARISON =====');
-        console.log('📊 Creation balance:', invoice.balanceAtCreation);
-        console.log('📊 Creation balance (BigInt):', creationBalance.toString());
-        console.log('📊 Current balance (BigInt):', currentBalance.toString());
-        console.log('📊 Balance increase since creation:', balanceIncrease.toString());
-        
-        if (balanceIncrease > 0n) {
-          // Funds have been received
-          const requestedAmount = BigInt(invoice.requestedAmount);
-          
+      const creationBalance = invoice.balanceAtCreation ? BigInt(invoice.balanceAtCreation) : 0n;
+      const balanceIncrease = currentBalance - creationBalance;
+      
+      // Use the larger of balance increase or detected transaction amount
+      const totalReceived = balanceIncrease > detectedPaymentAmount ? balanceIncrease : detectedPaymentAmount;
+      
+      console.log('📊 ===== BALANCE COMPARISON =====');
+      console.log('📊 Creation balance:', invoice.balanceAtCreation || '0x0');
+      console.log('📊 Creation balance (BigInt):', creationBalance.toString());
+      console.log('📊 Current balance (BigInt):', currentBalance.toString());
+      console.log('📊 Balance increase since creation:', balanceIncrease.toString());
+      console.log('📊 Detected from transactions:', detectedPaymentAmount.toString());
+      console.log('📊 Total received (max of balance increase or tx history):', totalReceived.toString());
+      
+      // Handle both wei format (preferred) and decimal string (legacy)
+      // If the string contains a decimal point, parse as decimal; otherwise treat as wei
+      let requestedAmountWei: bigint;
+      if (invoice.requestedAmount && invoice.requestedAmount.includes('.')) {
+        requestedAmountWei = parseEther(invoice.requestedAmount);
+      } else {
+        try {
+          requestedAmountWei = BigInt(invoice.requestedAmount);
+        } catch {
+          requestedAmountWei = 0n;
+        }
+      }
+
+      // Check if we have a balance snapshot from creation
+      if (invoice.balanceAtCreation && invoice.balanceAtCreation !== '0' && invoice.balanceAtCreation !== '0x0') {
+        // We have a balance snapshot, compare with totalReceived
+        if (totalReceived > 0n) {
           console.log('💰 ===== PAYMENT VALIDATION =====');
-          console.log('💰 Balance increase:', balanceIncrease.toString());
-          console.log('💰 Requested amount:', invoice.requestedAmount);
-          console.log('💰 Requested amount (BigInt):', requestedAmount.toString());
-          console.log('💰 Is balance increase >= requested?', balanceIncrease >= requestedAmount);
+          console.log('💰 Total received:', totalReceived.toString());
+          console.log('💰 Requested amount (original):', invoice.requestedAmount);
+          console.log('💰 Requested amount (wei):', requestedAmountWei.toString());
+          console.log('💰 Is total received >= requested?', totalReceived >= requestedAmountWei);
           
-          if (balanceIncrease >= requestedAmount) {
-            console.log('✅ Payment confirmed! Amount received:', balanceIncrease.toString());
+          if (totalReceived >= requestedAmountWei) {
+            console.log('✅ Payment confirmed! Amount received:', totalReceived.toString());
             
             // Create a transaction record for the payments section
+            // Note: This will be updated/replaced when on-chain confirmation happens
             const transactionRecord: StoredTransaction = {
-              txHash: `manual_${Date.now()}`, // Generate a unique ID for manual confirmation
+              txHash: `manual_${Date.now()}`, // Generate a unique ID for manual confirmation (will be replaced by on-chain tx hash)
               invoiceId: invoice.id,
               from: 'unknown', // We don't know the sender for manual confirmation
               to: paymentAddress,
-              amount: balanceIncrease.toString(),
-              blockNumber: 0, // Manual confirmation, no block number
+              amount: totalReceived.toString(), // Use totalReceived (not balanceIncrease) to include transaction history
+              blockNumber: 0, // Manual confirmation, no block number (will be updated from event)
               timestamp: Date.now(),
               confirmations: 1, // Manual confirmation counts as 1 confirmation
               status: 'confirmed',
               detectedAt: Date.now(),
             };
             
-            // Store the transaction
+            // Store the transaction (may be updated later when on-chain confirmation completes)
             transactionStorage.addTransaction(transactionRecord);
             
-            return { confirmed: true, amount: balanceIncrease.toString() };
+            return { confirmed: true, amount: totalReceived.toString(), transaction: transactionRecord };
           } else {
-            console.log('⚠️ Partial payment received:', balanceIncrease.toString(), 'Expected:', requestedAmount.toString());
-            console.log('   Shortfall:', (requestedAmount - balanceIncrease).toString(), 'wei');
-            return { confirmed: false, amount: balanceIncrease.toString(), error: 'Partial payment received' };
+            console.log('⚠️ Partial payment received:', totalReceived.toString(), 'Expected:', requestedAmountWei.toString());
+            console.log('   Shortfall:', (requestedAmountWei - totalReceived).toString(), 'wei');
+            return { confirmed: false, amount: totalReceived.toString(), error: `Partial payment received. Got ${totalReceived.toString()} wei, need ${requestedAmountWei.toString()} wei` };
           }
         }
-      } else {
-        // No creation balance snapshot, check if current balance > 0
-        if (currentBalance > 0n) {
-          const requestedAmount = BigInt(invoice.requestedAmount);
+      } else if (currentBalance > 0n || detectedPaymentAmount > 0n) {
+        // No balance snapshot, but we have current balance or detected transactions
+        const amountToCheck = detectedPaymentAmount > currentBalance ? detectedPaymentAmount : currentBalance;
+        
+        console.log('💰 ===== PAYMENT VALIDATION (NO SNAPSHOT) =====');
+        console.log('💰 Amount to check:', amountToCheck.toString());
+        console.log('💰 Requested amount (wei):', requestedAmountWei.toString());
+        
+        if (amountToCheck >= requestedAmountWei) {
+          console.log('✅ Payment confirmed! Amount:', amountToCheck.toString());
           
-          if (currentBalance >= requestedAmount) {
-            console.log('✅ Payment confirmed! Current balance:', currentBalance.toString());
-            
-            // Create a transaction record for the payments section
-            const transactionRecord: StoredTransaction = {
-              txHash: `manual_${Date.now()}`, // Generate a unique ID for manual confirmation
-              invoiceId: invoice.id,
-              from: 'unknown', // We don't know the sender for manual confirmation
-              to: paymentAddress,
-              amount: currentBalance.toString(),
-              blockNumber: 0, // Manual confirmation, no block number
-              timestamp: Date.now(),
-              confirmations: 1, // Manual confirmation counts as 1 confirmation
-              status: 'confirmed',
-              detectedAt: Date.now(),
-            };
-            
-            // Store the transaction
-            transactionStorage.addTransaction(transactionRecord);
-            
-            return { confirmed: true, amount: currentBalance.toString() };
-          } else {
-            console.log('⚠️ Partial payment detected. Current balance:', currentBalance.toString(), 'Expected:', requestedAmount.toString());
-            return { confirmed: false, amount: currentBalance.toString(), error: 'Partial payment detected' };
-          }
+          // Create a transaction record for the payments section
+          const transactionRecord: StoredTransaction = {
+            txHash: `manual_${Date.now()}`, // Generate a unique ID for manual confirmation
+            invoiceId: invoice.id,
+            from: 'unknown', // We don't know the sender for manual confirmation
+            to: paymentAddress,
+            amount: amountToCheck.toString(),
+            blockNumber: 0, // Manual confirmation, no block number
+            timestamp: Date.now(),
+            confirmations: 1, // Manual confirmation counts as 1 confirmation
+            status: 'confirmed',
+            detectedAt: Date.now(),
+          };
+          
+          // Store the transaction
+          transactionStorage.addTransaction(transactionRecord);
+          
+          return { confirmed: true, amount: amountToCheck.toString() };
+        } else {
+          console.log('⚠️ Partial payment detected. Amount:', amountToCheck.toString(), 'Expected:', requestedAmountWei.toString());
+          return { confirmed: false, amount: amountToCheck.toString(), error: `Partial payment. Got ${amountToCheck.toString()} wei, need ${requestedAmountWei.toString()} wei` };
         }
       }
       
       console.log('❌ No payment detected');
+      console.log('   Current balance:', currentBalance.toString(), 'wei');
+      console.log('   Detected from transactions:', detectedPaymentAmount.toString(), 'wei');
+      console.log('   💡 If you sent BTC to this address, it may take a few moments for Boar Network to index it.');
+      console.log('   💡 Please try again in 10-30 seconds or check the transaction on the explorer.');
       return { confirmed: false, amount: '0' };
       
     } catch (error) {

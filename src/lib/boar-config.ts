@@ -24,7 +24,7 @@ export const MEZO_EXPLORER_URL = 'https://explorer.test.mezo.org';
 // WebSocket message types for Boar API
 export interface BoarMessage {
   type: 'subscribe' | 'unsubscribe' | 'transaction' | 'block' | 'error';
-  data?: any;
+  data?: unknown;
   address?: string;
   txHash?: string;
   blockNumber?: number;
@@ -55,7 +55,7 @@ export class BoarError extends Error {
   constructor(
     message: string,
     public code: string,
-    public details?: any
+    public details?: unknown
   ) {
     super(message);
     this.name = 'BoarError';

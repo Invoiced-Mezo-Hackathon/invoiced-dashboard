@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { X, Copy, Download } from 'lucide-react';
 import QRCode from 'qrcode';
 import { cn } from '@/lib/utils';
 import toast from 'react-hot-toast';
