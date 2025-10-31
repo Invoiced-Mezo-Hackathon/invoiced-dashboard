@@ -277,7 +277,7 @@ export function Settings() {
         >
           <div className="space-y-4">
             <div className="flex items-center justify-between p-4 rounded-xl bg-[#2C2C2E]/20 border border-green-400/10">
-              <div>
+            <div>
                 <p className="text-sm text-white/60 mb-1 font-navbar">Connected Wallet</p>
                 <p className="font-mono text-sm text-white">{formatAddress(address!)}</p>
               </div>
@@ -287,7 +287,7 @@ export function Settings() {
               </div>
             </div>
             <div className="flex items-center justify-between p-4 rounded-xl bg-[#2C2C2E]/20 border border-green-400/10">
-              <div>
+            <div>
                 <p className="text-sm text-white/60 mb-1 font-navbar">Network</p>
                 <p className="text-sm font-medium text-white font-navbar">{getNetworkName(chainId)}</p>
               </div>

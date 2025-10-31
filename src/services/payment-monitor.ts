@@ -427,7 +427,7 @@ class PaymentMonitorService {
         console.log('❌ Payment address is not a valid EVM address for Mezo:', paymentAddress);
         return { confirmed: false, amount: '0', error: 'Invalid Mezo address' };
       }
-
+      
       console.log('🔍 Using payment address:', paymentAddress);
       
       // Check if invoice is still valid (not expired)
@@ -487,8 +487,8 @@ class PaymentMonitorService {
       // If the string contains a decimal point, parse as decimal; otherwise treat as wei
       let requestedAmountWei: bigint;
       if (invoice.requestedAmount && invoice.requestedAmount.includes('.')) {
-        requestedAmountWei = parseEther(invoice.requestedAmount);
-      } else {
+          requestedAmountWei = parseEther(invoice.requestedAmount);
+        } else {
         try {
           requestedAmountWei = BigInt(invoice.requestedAmount);
         } catch {
@@ -534,9 +534,9 @@ class PaymentMonitorService {
             return { confirmed: false, amount: totalReceived.toString(), error: `Partial payment received. Got ${totalReceived.toString()} wei, need ${requestedAmountWei.toString()} wei` };
           }
         }
-      } else if (currentBalance > 0n || detectedPaymentAmount > 0n) {
-        // No balance snapshot, but we have current balance or detected transactions
-        const amountToCheck = detectedPaymentAmount > currentBalance ? detectedPaymentAmount : currentBalance;
+      } else if (detectedPaymentAmount > 0n) {
+        // No balance snapshot: only rely on detected inbound transactions, not total current balance
+        const amountToCheck = detectedPaymentAmount;
         
         console.log('💰 ===== PAYMENT VALIDATION (NO SNAPSHOT) =====');
         console.log('💰 Amount to check:', amountToCheck.toString());

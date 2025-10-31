@@ -200,7 +200,7 @@ export function CreateInvoicePanel({ onInvoiceCreated }: CreateInvoicePanelProps
       {/* Compact Button */}
       <button
         onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-        className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-medium transition-all duration-200 shadow-lg hover:shadow-xl text-sm"
+        className="flex items-center gap-2 px-4 py-2.5 sm:py-2 rounded-lg bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 active:from-orange-700 active:to-orange-800 text-white font-medium transition-all duration-200 shadow-lg hover:shadow-xl active:scale-95 text-xs sm:text-sm min-h-[44px] touch-manipulation"
       >
         <Plus className="w-4 h-4" />
         <span>Create Invoice</span>
@@ -213,11 +213,14 @@ export function CreateInvoicePanel({ onInvoiceCreated }: CreateInvoicePanelProps
           onClick={() => setIsDropdownOpen(false)}
         >
           <div 
-            className="w-full max-w-lg max-h-[90vh] overflow-y-auto bg-[#2C2C2E]/90 backdrop-blur-xl border border-green-400/20 rounded-2xl p-6 shadow-2xl"
+            className="w-full max-w-lg max-h-[95vh] sm:max-h-[90vh] overflow-y-auto bg-[#2C2C2E]/90 backdrop-blur-xl border border-green-400/20 rounded-xl sm:rounded-2xl p-4 sm:p-6 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-semibold text-white font-navbar">Create New Invoice</h3>
+              <h3 className="flex items-center gap-2 text-lg font-semibold text-white font-navbar">
+                <span className="text-[#F7931A] text-sm">₿</span>
+                Create New Invoice
+              </h3>
               <button
                 onClick={() => setIsDropdownOpen(false)}
                 className="w-8 h-8 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-white/60 hover:text-white hover:bg-white/20 transition-all"
@@ -338,12 +341,15 @@ export function CreateInvoicePanel({ onInvoiceCreated }: CreateInvoicePanelProps
                     </p>
                     <p className="text-xs text-white/60 mt-1 font-navbar">
                       {isLoadingPrice ? (
-                    <span className="flex items-center gap-1">
+                        <span className="flex items-center gap-1">
                           <span className="w-3 h-3 border border-green-400 border-t-transparent rounded-full animate-spin inline-block"></span>
                           Loading Bitcoin price...
                         </span>
                       ) : (
-                        `Current Bitcoin price: $${bitcoinPrice.toLocaleString()}`
+                        <span className="flex items-center gap-1.5">
+                          <span className="text-sm">₿</span>
+                          <span>Current Bitcoin price: ${bitcoinPrice.toLocaleString()}</span>
+                        </span>
                       )}
                     </p>
                   </div>
@@ -373,7 +379,7 @@ export function CreateInvoicePanel({ onInvoiceCreated }: CreateInvoicePanelProps
               <button
                 onClick={handleSendInvoice}
                 disabled={isCreating}
-                className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-green-500 hover:bg-green-600 disabled:bg-gray-500 text-white font-medium rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl disabled:cursor-not-allowed font-navbar"
+                className="w-full flex items-center justify-center gap-2 px-6 py-3 sm:py-2.5 bg-green-500 hover:bg-green-600 active:bg-green-700 disabled:bg-gray-500 text-white font-medium rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl active:scale-95 disabled:cursor-not-allowed font-navbar min-h-[44px] touch-manipulation text-sm sm:text-base"
               >
                 {isCreating ? (
                   <>

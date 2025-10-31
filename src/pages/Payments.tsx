@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { ArrowDownLeft, BarChart3, ExternalLink } from 'lucide-react';
 import { transactionStorage } from '@/services/transaction-storage';
 import { MEZO_EXPLORER_URL } from '@/lib/boar-config';
@@ -13,6 +13,7 @@ interface PaymentsProps {
 export function Payments({ invoices }: PaymentsProps) {
   const [bitcoinPrice, setBitcoinPrice] = useState<number>(0);
   const [version, setVersion] = useState(0); // trigger refresh when new events arrive
+  const notifiedTxsRef = useRef<Set<string>>(new Set());
 
   // Fetch real-time Bitcoin price
   useEffect(() => {
@@ -50,6 +51,7 @@ export function Payments({ invoices }: PaymentsProps) {
     eventName: 'InvoicePaid',
     onLogs: (logs) => {
       console.log('💰 InvoicePaid event detected, storing transaction details...');
+      // No bell notification here; invoice confirmation bell is dispatched on explicit user action
       // Store complete transaction info with all payment details
       for (const log of logs) {
         // InvoicePaid(uint256 indexed id, uint256 amount, uint256 timestamp, string paymentTxHash, string observedInboundAmount)
@@ -145,29 +147,32 @@ export function Payments({ invoices }: PaymentsProps) {
         const transactions = transactionStorage.getTransactionsForInvoice(invoice.id);
         const latestTransaction = transactions[0];
         
-        // Use observed amount from transaction if available (handles overpayments)
-        // Convert from wei to BTC for display
-        let displayAmount = invoice.amount; // Default to requested amount
-        if (latestTransaction?.amount) {
-          try {
-            // Transaction amount is in wei, convert to BTC
-            const amountInWei = BigInt(latestTransaction.amount);
-            displayAmount = Number(amountInWei) / Math.pow(10, 18);
-          } catch (e) {
-            console.warn('Failed to parse transaction amount, using invoice amount:', e);
+        // Prefer observedInboundAmount (wei) recorded on chain; fallback to tx amount (wei). Convert to BTC.
+        let amountBtc = invoice.amount; // fallback to requested amount
+        try {
+          const observed = (invoice as any).observedInboundAmount as string | undefined;
+          if (observed && observed !== '0') {
+            amountBtc = Number(BigInt(observed)) / Math.pow(10, 18);
+          } else if (latestTransaction?.amount) {
+            amountBtc = Number(BigInt(latestTransaction.amount)) / Math.pow(10, 18);
           }
-        }
+        } catch {}
+
+        // Only show tx link when we have a real tx hash
+        const txHash = latestTransaction?.txHash && latestTransaction.txHash.startsWith('0x')
+          ? latestTransaction.txHash
+          : (invoice.paymentTxHash && invoice.paymentTxHash.startsWith('0x') ? invoice.paymentTxHash : undefined);
         
         return {
           id: invoice.id,
           type: 'received' as const,
           counterparty: invoice.clientName,
-          amount: displayAmount, // Use actual received amount (may be more than requested)
-          requestedAmount: invoice.amount, // Keep original requested amount for reference
+          amount: amountBtc,
+          requestedAmount: invoice.amount,
           date: invoice.paidAt || invoice.createdAt,
           status: latestTransaction?.status || 'confirmed',
           bitcoinAddress: invoice.bitcoinAddress,
-          txHash: latestTransaction?.txHash || invoice.paymentTxHash,
+          txHash,
           blockNumber: latestTransaction?.blockNumber,
           confirmations: latestTransaction?.confirmations,
           from: latestTransaction?.from,

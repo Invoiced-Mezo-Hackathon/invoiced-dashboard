@@ -19,15 +19,21 @@ const navItems = [
 export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
+  const handleTabChange = (tab: string) => {
+    onTabChange(tab);
+    // Close mobile menu when navigating
+    setIsMobileMenuOpen(false);
+  };
+
   return (
     <>
       {/* Mobile menu button */}
       <button
         onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-        className="fixed top-4 left-4 z-50 lg:hidden bg-[#2C2C2E] backdrop-blur-md p-2 rounded-lg border border-[#2C2C2E]/20"
+        className="fixed top-2 left-2 sm:top-4 sm:left-4 z-50 lg:hidden bg-[#2C2C2E] backdrop-blur-md p-3 sm:p-2 rounded-lg border border-[#2C2C2E]/20 min-w-[44px] min-h-[44px] flex items-center justify-center touch-manipulation"
         aria-label="Toggle menu"
       >
-        {isMobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+        {isMobileMenuOpen ? <X className="w-5 h-5 sm:w-6 sm:h-6 text-white" /> : <Menu className="w-5 h-5 sm:w-6 sm:h-6 text-white" />}
       </button>
 
       {/* Sidebar */}
@@ -62,12 +68,12 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
         {navItems.map((item) => (
           <button
             key={item.id}
-            onClick={() => onTabChange(item.id)}
+            onClick={() => handleTabChange(item.id)}
             className={cn(
-              'w-full flex items-center gap-3 sm:gap-4 px-4 sm:px-5 py-3 sm:py-4 rounded-xl transition-all duration-200 group',
+              'w-full flex items-center gap-3 sm:gap-4 px-4 sm:px-5 py-3.5 sm:py-4 rounded-xl transition-all duration-200 group min-h-[44px] touch-manipulation',
               activeTab === item.id
                 ? 'bg-green-500/10 text-white shadow-sm border border-green-400/50'
-                : 'bg-transparent text-[#A0A0A0] hover:bg-green-500/5 hover:text-white border border-transparent'
+                : 'bg-transparent text-[#A0A0A0] hover:bg-green-500/5 hover:text-white active:bg-green-500/10 border border-transparent'
             )}
           >
             <i className={cn(

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -13,8 +13,12 @@ export function Vault() {
   const { address, isConnected } = useWallet();
   const [activeAction, setActiveAction] = useState<VaultAction>(null);
   const [actionAmount, setActionAmount] = useState('');
-  const [recipientAddress, setRecipientAddress] = useState('');
+  const [actionLocked, setActionLocked] = useState(false);
   const [lastBorrowedAmount, setLastBorrowedAmount] = useState<string>(''); // Store borrowed amount before clearing
+  const [notifiedDeposit, setNotifiedDeposit] = useState(false);
+  const [notifiedBorrow, setNotifiedBorrow] = useState(false);
+  const [notifiedRepay, setNotifiedRepay] = useState(false);
+  const [notifiedWithdraw, setNotifiedWithdraw] = useState(false);
   
   const { 
     vaultData, 
@@ -31,16 +35,12 @@ export function Vault() {
     borrowMUSD,
     repayMUSD,
     withdrawCollateral,
-    sendFromVault,
-    sendBitcoin, // Legacy, kept for backwards compatibility
     isPending,
     isDepositSuccess,
     isBorrowSuccess,
     isRepaySuccess,
     isWithdrawSuccess,
     isApprovalSuccess,
-    isSendCollateralSuccess,
-    isSendMUSDSuccess,
     isDepositConfirming,
     isBorrowConfirming,
     isRepayConfirming,
@@ -49,8 +49,6 @@ export function Vault() {
     borrowHash,
     repayHash,
     withdrawHash,
-    sendCollateralHash,
-    sendMUSDHash,
     approvalHash,
     musdAllowance,
     pendingRepayAmount, // For showing auto-repay status
@@ -65,7 +63,41 @@ export function Vault() {
       console.log('🔄 Repay modal opened - refreshing MUSD balance...');
       refetchAll();
     }
+    // reset per-action notification latches when changing action
+    setNotifiedDeposit(false);
+    setNotifiedBorrow(false);
+    setNotifiedRepay(false);
+    setNotifiedWithdraw(false);
   }, [activeAction, refetchAll]);
+
+  // One-shot notifications per success state
+  useEffect(() => {
+    if (isDepositSuccess && !notifiedDeposit) {
+      try { window.dispatchEvent(new CustomEvent('notify', { detail: { key: `vault_deposit_${depositHash || actionAmount || '0'}`, title: 'Vault: Deposit confirmed', message: `${actionAmount || '0'} BTC deposited` } })); } catch {}
+      setNotifiedDeposit(true);
+    }
+  }, [isDepositSuccess, notifiedDeposit, actionAmount]);
+
+  useEffect(() => {
+    if (isBorrowSuccess && !notifiedBorrow) {
+      try { window.dispatchEvent(new CustomEvent('notify', { detail: { key: `vault_borrow_${borrowHash || lastBorrowedAmount || actionAmount || '0'}`, title: 'Vault: Borrow confirmed', message: `${lastBorrowedAmount || actionAmount || '0'} MUSD borrowed` } })); } catch {}
+      setNotifiedBorrow(true);
+    }
+  }, [isBorrowSuccess, notifiedBorrow, actionAmount, lastBorrowedAmount]);
+
+  useEffect(() => {
+    if (isRepaySuccess && !notifiedRepay) {
+      try { window.dispatchEvent(new CustomEvent('notify', { detail: { key: `vault_repay_${repayHash || actionAmount || borrowedAmount || '0'}`, title: 'Vault: Repay confirmed', message: `${actionAmount || borrowedAmount || '0'} MUSD repaid` } })); } catch {}
+      setNotifiedRepay(true);
+    }
+  }, [isRepaySuccess, notifiedRepay, actionAmount, borrowedAmount]);
+
+  useEffect(() => {
+    if (isWithdrawSuccess && !notifiedWithdraw) {
+      try { window.dispatchEvent(new CustomEvent('notify', { detail: { key: `vault_withdraw_${withdrawHash || actionAmount || '0'}`, title: 'Vault: Withdraw confirmed', message: `${actionAmount || '0'} BTC withdrawn` } })); } catch {}
+      setNotifiedWithdraw(true);
+    }
+  }, [isWithdrawSuccess, notifiedWithdraw, actionAmount]);
 
   const handleAction = async () => {
     if (!activeAction || !actionAmount) return;
@@ -101,7 +133,6 @@ export function Vault() {
       
       // Don't clear actionAmount or close modal - let success messages show
       // User will close modal manually via success message buttons
-      setRecipientAddress('');
       
       // Modal stays open for all actions to show status/success messages
     } catch (err) {
@@ -124,6 +155,32 @@ export function Vault() {
       default: return 'text-gray-600';
     }
   };
+
+  // Stabilize collateral ratio display to avoid absurd values when debt is near zero
+  // Professional DeFi standard: show actual percentages, cap display at 500% for UI clarity
+  const COLLATERAL_RATIO_MAX_DISPLAY = 500; // Standard DeFi display cap
+  
+  const displayCollateralRatio = useMemo(() => {
+    const raw = Number(vaultData?.collateralRatio || 0);
+    if (!Number.isFinite(raw) || raw < 0) return 0;
+    // If borrowed is repaid (very small or zero), treat as 0% (no applicable ratio)
+    if (Number(borrowedAmount || '0') <= 0) return 0;
+    // Cap at professional maximum for UI display (DeFi standard: 500%)
+    return Math.min(raw, COLLATERAL_RATIO_MAX_DISPLAY);
+  }, [vaultData?.collateralRatio, borrowedAmount]);
+
+  const displayCollateralRatioText = useMemo(() => {
+    const val = displayCollateralRatio;
+    const raw = Number(vaultData?.collateralRatio || 0);
+    // If raw value exceeds display cap, show capped value with "+" indicator
+    if (raw > COLLATERAL_RATIO_MAX_DISPLAY && val >= COLLATERAL_RATIO_MAX_DISPLAY) {
+      return `${COLLATERAL_RATIO_MAX_DISPLAY}+`;
+    }
+    // Format based on value range for readability
+    if (val >= 100) return Math.round(val).toString();
+    if (val >= 10) return val.toFixed(1);
+    return val.toFixed(2);
+  }, [displayCollateralRatio, vaultData?.collateralRatio]);
 
   const getActionTitle = () => {
     if (!activeAction) return '';
@@ -218,11 +275,11 @@ export function Vault() {
       {/* Primary Actions - moved to top */}
       <div className="max-w-2xl mx-auto mb-6">
         <div className="flex flex-nowrap gap-2 overflow-x-auto no-scrollbar">
-          {(['deposit', 'borrow', 'repay', 'withdraw'] as const).map((actionKey) => (
+            {(['deposit', 'borrow', 'repay', 'withdraw'] as const).map((actionKey) => (
             <button
               key={actionKey}
-              onClick={() => setActiveAction(actionKey)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-navbar text-white ${actionStyles[actionKey].bg} border ${actionStyles[actionKey].border} ${actionStyles[actionKey].hoverBg} ${actionStyles[actionKey].hoverBorder} transition-all duration-200 capitalize whitespace-nowrap`}
+                onClick={() => { setActiveAction(actionKey); setActionLocked(false); }}
+              className={`flex items-center gap-2 px-3 sm:px-4 py-2.5 sm:py-2 rounded-full text-xs sm:text-sm font-navbar text-white min-h-[44px] ${actionStyles[actionKey].bg} border ${actionStyles[actionKey].border} ${actionStyles[actionKey].hoverBg} ${actionStyles[actionKey].hoverBorder} transition-all duration-200 capitalize whitespace-nowrap touch-manipulation active:scale-95`}
             >
               <span className="w-7 h-7 rounded-full border border-white/30 flex items-center justify-center bg-white/10">
                 <i className={`${actionStyles[actionKey].iconClass} text-white text-xs`}></i>
@@ -233,7 +290,7 @@ export function Vault() {
         </div>
         
         {/* Rewards Banner (compact, replaces previous balance chip) */}
-        <div className="mt-3 flex items-center justify-center">
+          <div className="mt-3 flex items-center justify-center">
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-purple-500/10 border border-purple-400/30">
             <span className="text-base">🎁</span>
             <span className="text-xs font-navbar text-purple-300">Earn mats rewards coming soon</span>
@@ -261,12 +318,12 @@ export function Vault() {
                 fill="none"
                 stroke="rgba(74, 222, 128, 0.8)"
                 strokeWidth="12"
-                strokeDasharray={`${((vaultData?.collateralRatio || 0) / 200) * 502.4} 502.4`}
+                strokeDasharray={`${(Math.min(displayCollateralRatio, COLLATERAL_RATIO_MAX_DISPLAY) / COLLATERAL_RATIO_MAX_DISPLAY) * 502.4} 502.4`}
                 strokeLinecap="round"
               />
             </svg>
             <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <p className="text-4xl font-bold font-navbar">{vaultData?.collateralRatio || 0}%</p>
+              <p className="text-4xl font-bold font-navbar">{displayCollateralRatioText}%</p>
               <div className="flex items-center gap-1">
                 <p className="text-sm font-navbar text-white/60">Collateral Ratio</p>
                 <div className="group relative">
@@ -279,7 +336,7 @@ export function Vault() {
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-6 w-full">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-6 w-full">
             <div className="text-center">
               <div className="flex items-center justify-center gap-1 mb-1">
                 <p className="text-sm text-white/60">Vault BTC</p>
@@ -342,7 +399,7 @@ export function Vault() {
 
           {/* Borrowed (principal) and Total Due Now (principal + accrued interest) */}
           {parseFloat(borrowedAmount) > 0 && (
-            <div className="mt-4 grid grid-cols-2 gap-3">
+            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="rounded-xl border border-white/10 bg-white/5 p-3">
                 <p className="text-xs font-navbar text-white/60">Borrowed</p>
                 <p className="text-lg font-navbar font-semibold">{borrowedAmount} MUSD</p>
@@ -699,21 +756,37 @@ export function Vault() {
       {/* Action Modal */}
       {activeAction && (
         <div 
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-3 sm:p-4 safe-area-inset"
           onClick={(e) => {
             // Close modal when clicking outside (only if not clicking on the modal content)
             if (e.target === e.currentTarget) {
               setActiveAction(null);
-              setRecipientAddress('');
               setActionAmount('');
+              setActionLocked(false);
             }
           }}
         >
           <div 
-            className="bg-[#2C2C2E]/90 backdrop-blur-xl p-8 rounded-3xl border border-green-400/20 w-full max-w-md mx-auto"
+            className="bg-[#2C2C2E]/90 backdrop-blur-xl p-5 sm:p-8 rounded-xl sm:rounded-3xl border border-green-400/20 w-full max-w-md mx-auto max-h-[95vh] sm:max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 className="text-2xl font-bold mb-6 font-navbar text-white">{getActionTitle()}</h2>
+            <button
+              type="button"
+              aria-label="Close"
+              onClick={() => {
+                setActiveAction(null);
+                setActionAmount('');
+                setLastBorrowedAmount('');
+                setActionLocked(false);
+              }}
+              className="absolute right-4 top-4 w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 border border-white/20 text-white flex items-center justify-center"
+            >
+              ✕
+            </button>
+            <h2 className="flex items-center gap-2 text-2xl font-bold mb-6 font-navbar text-white">
+              {activeAction === 'deposit' && <span className="text-[#F7931A] text-lg">₿</span>}
+              {getActionTitle()}
+            </h2>
             
             {/* Compact MUSD Balance Status for repay */}
             {activeAction === 'repay' && (
@@ -782,7 +855,7 @@ export function Vault() {
                         <p className="text-xs font-navbar text-white/60">Max withdrawable now</p>
                         <p className="text-sm font-navbar font-semibold text-purple-300">{maxWithdrawable} BTC</p>
                       </div>
-                      <div className="mt-2 flex gap-2">
+                      <div className="mt-2">
                         <button
                           type="button"
                           onClick={() => setActionAmount(maxWithdrawable)}
@@ -791,14 +864,8 @@ export function Vault() {
                         >
                           Withdraw Max
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => setActionAmount(collateralBalance || '0')}
-                          className="flex-1 text-xs font-navbar px-3 py-2 rounded-lg bg-white/5 text-white/80 border border-white/10 hover:bg-white/10 transition-colors"
-                        >
-                          Use Collateral
-                        </button>
                       </div>
+                      <p className="text-[10px] text-white/40 mt-2">Based on current debt and repayments</p>
                     </div>
                     {parseFloat(borrowedAmount || '0') > 0 && (
                       <div className="p-2 rounded-lg bg-yellow-500/10 border border-yellow-400/30">
@@ -904,9 +971,9 @@ export function Vault() {
               <Button
                 onClick={() => {
                   setActiveAction(null);
-                  setRecipientAddress('');
                   setActionAmount('');
                   setLastBorrowedAmount(''); // Clear borrow amount too
+                  setActionLocked(false);
                 }}
                 variant="outline"
                 disabled={isLoading && (isDepositConfirming || isBorrowConfirming || isRepayConfirming || isWithdrawConfirming)} // Only disable during actual blockchain confirmation
@@ -916,6 +983,7 @@ export function Vault() {
               </Button>
               <Button
                 onClick={() => {
+                  if (actionLocked) return;
                   if (activeAction === 'repay') {
                     // For repay, ensure balance is fresh and trigger wallet popup
                     console.log('🔄 Confirming repay - balance check:', { musdBalance, actionAmount, totalDueNow });
@@ -925,12 +993,15 @@ export function Vault() {
                       console.warn('⚠️ MUSD balance is 0, but proceeding - may need approval first');
                     }
                   }
+                  setActionLocked(true);
                   handleAction();
                 }}
-                disabled={!actionAmount || isLoading || (activeAction === 'repay' && parseFloat(musdBalance) === 0 && !isMusdBalanceLoading)}
+                disabled={actionLocked || !actionAmount || isLoading || (activeAction === 'repay' && parseFloat(musdBalance) === 0 && !isMusdBalanceLoading)}
                 className="flex-1 bg-green-400 hover:bg-green-500 text-white border-0"
               >
-                {isLoading ? (
+                {actionLocked ? (
+                  'Submitted — close to continue'
+                ) : isLoading ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                     {activeAction === 'deposit' && 'Confirming deposit...'}
