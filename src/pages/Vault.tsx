@@ -237,7 +237,7 @@ export function Vault() {
           label: 'Wallet BTC Balance',
           value: `${walletBtcBalance} BTC`
         };
-      case 'withdraw':
+      case 'withdraw': {
         const safeMusdForWithdraw = musdBalance && !isNaN(parseFloat(musdBalance)) && parseFloat(musdBalance) >= 0 
           ? musdBalance 
           : '0';
@@ -246,8 +246,9 @@ export function Vault() {
           value: `${collateralBalance} BTC`,
           additionalInfo: `Your MUSD Balance: ${safeMusdForWithdraw} MUSD`
         };
+      }
       case 'borrow':
-      case 'repay':
+      case 'repay': {
         const safeBalance = musdBalance && !isNaN(parseFloat(musdBalance)) && parseFloat(musdBalance) >= 0 
           ? musdBalance 
           : '0';
@@ -255,6 +256,7 @@ export function Vault() {
           label: 'Current MUSD Balance',
           value: `${safeBalance} MUSD`
         };
+      }
       default:
         return {
           label: 'Balance',

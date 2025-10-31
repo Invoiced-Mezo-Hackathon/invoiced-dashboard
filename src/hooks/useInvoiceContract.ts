@@ -159,8 +159,8 @@ export function useInvoiceContract(): UseInvoiceContractReturn {
       refetchAllInvoices();
       if (address && isConnected) refetchUserInvoices();
       try {
-        for (const log of logs) {
-          const id = (log.args?.id as bigint | undefined)?.toString() || 'unknown';
+        for (const log of (logs as any[])) {
+          const id = ((log as any).args?.id as bigint | undefined)?.toString() || 'unknown';
           if (!notifiedCreatedRef.current.has(id)) {
             toast.success('Client has been notified');
             // Bell notification: client received request and will pay within an hour
@@ -179,8 +179,8 @@ export function useInvoiceContract(): UseInvoiceContractReturn {
       refetchAllInvoices();
       if (address && isConnected) refetchUserInvoices();
       try {
-        for (const log of logs) {
-          const id = (log.args?.id as bigint | undefined)?.toString() || 'unknown';
+        for (const log of (logs as any[])) {
+          const id = ((log as any).args?.id as bigint | undefined)?.toString() || 'unknown';
           if (!notifiedPaidRef.current.has(id)) {
             toast.success('Payment confirmed on-chain');
             // Do not push a bell notification here; the bell is emitted on user confirmPayment success
@@ -480,7 +480,7 @@ export function useInvoiceContract(): UseInvoiceContractReturn {
               data.currency, // currency
               balanceSnapshotWei // balanceAtCreation
             ],
-          });
+          } as any);
           
           console.log('createInvoiceWrite succeeded, transaction hash:', hash);
           setCreateTx({ status: 'success', hash });
@@ -619,7 +619,7 @@ export function useInvoiceContract(): UseInvoiceContractReturn {
               paymentTxHash,
               observedAmount
             ]
-          });
+          } as any);
           
           // Store transaction details immediately for Payments page
           const paymentAddress = invoice.payToAddress || invoice.bitcoinAddress;
@@ -714,7 +714,7 @@ export function useInvoiceContract(): UseInvoiceContractReturn {
         abi: INVOICE_CONTRACT_ABI,
         functionName: 'cancelInvoice',
         args: [BigInt(invoiceId)]
-      });
+      } as any);
       setCancelTx({ status: 'success', hash });
       toast.dismiss('cancel-invoice');
       toast.success('Invoice cancelled successfully on-chain');
@@ -751,7 +751,7 @@ export function useInvoiceContract(): UseInvoiceContractReturn {
         abi: INVOICE_CONTRACT_ABI,
         functionName: 'approveInvoice',
         args: [BigInt(invoiceId)],
-      });
+      } as any);
       toast.success('Approval transaction sent');
     } catch (error) {
       console.error('Error approving invoice:', error);

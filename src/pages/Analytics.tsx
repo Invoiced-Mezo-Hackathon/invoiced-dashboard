@@ -90,7 +90,8 @@ export function Analytics({ invoices }: AnalyticsProps) {
       }
     } else {
       // Initialize all months from oldest date to current month (always include current month)
-      const startDate = new Date(oldestDate.getFullYear(), oldestDate.getMonth(), 1);
+      const od = oldestDate as Date;
+      const startDate = new Date(od.getFullYear(), od.getMonth(), 1);
       const currentDate = new Date(now.getFullYear(), now.getMonth(), 1);
       
       let current = new Date(startDate);
@@ -295,7 +296,7 @@ export function Analytics({ invoices }: AnalyticsProps) {
         <div className="relative z-10">
           <div className="h-80 overflow-x-auto pb-4">
             <div className="flex items-end gap-3 min-w-max px-2">
-              {monthlyData.map((data, index) => {
+              {monthlyData.map((data) => {
                 const height = maxRevenue > 0 ? (data.revenue / maxRevenue) * 100 : 0;
                 const monthLabel = new Date(data.month + '-01').toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
                 const hasRevenue = data.revenue > 0;

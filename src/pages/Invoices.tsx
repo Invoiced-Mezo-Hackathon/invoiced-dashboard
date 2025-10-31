@@ -1,16 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
-import { X, CheckCircle, XCircle, QrCode, Clock, Eye } from 'lucide-react';
+import { X, CheckCircle, XCircle, QrCode, Eye } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { InvoiceQRModal } from '@/components/invoice/InvoiceQRModal';
 import { CreateInvoicePanel } from '@/components/invoice/CreateInvoicePanel';
 // import { useInvoicePaymentMonitor } from '@/hooks/usePaymentMonitor';
 import { useInvoiceContract } from '@/hooks/useInvoiceContract';
-import { useCountdown } from '@/hooks/useCountdown';
 import { Invoice as InvoiceType } from '@/types/invoice';
-import type { StoredTransaction } from '@/services/transaction-storage';
 import toast from 'react-hot-toast';
-import { invoiceStorage } from '@/services/invoice-storage';
 
 interface Invoice {
   id: string;
@@ -40,20 +37,20 @@ export function Invoices({ invoices }: InvoicesProps) {
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'paid' | 'cancelled' | 'expired'>('all');
   const [showCancelConfirm, setShowCancelConfirm] = useState<Invoice | null>(null);
   const [bitcoinPrice, setBitcoinPrice] = useState<number>(0);
-  const [isLoadingPrice, setIsLoadingPrice] = useState<boolean>(false);
+  const [_isLoadingPrice, _setIsLoadingPrice] = useState<boolean>(false);
 
   useEffect(() => {
     let cancelled = false;
     const fetchPrice = async () => {
       try {
-        setIsLoadingPrice(true);
+        _setIsLoadingPrice(true);
         const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd');
         const data = await res.json();
         if (!cancelled) setBitcoinPrice(data.bitcoin.usd || 0);
       } catch {
         if (!cancelled) setBitcoinPrice(0);
       } finally {
-        if (!cancelled) setIsLoadingPrice(false);
+        if (!cancelled) _setIsLoadingPrice(false);
       }
     };
     fetchPrice();
@@ -451,19 +448,4 @@ export function Invoices({ invoices }: InvoicesProps) {
   );
 }
 
-// Timer component for invoice expiry
-function InvoiceTimer({ expiresAt }: { expiresAt: string }) {
-  const { label, isExpired } = useCountdown(expiresAt);
-  
-  return (
-    <div className="mt-2 flex items-center gap-1">
-      <Clock className="w-3 h-3 text-yellow-400" />
-      <span className={cn(
-        "text-xs font-navbar font-medium",
-        isExpired ? "text-red-400" : "text-yellow-400"
-      )}>
-        {isExpired ? 'Expired' : label}
-      </span>
-    </div>
-  );
-}
+// InvoiceTimer removed (unused)
