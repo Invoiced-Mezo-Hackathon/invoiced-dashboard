@@ -55,11 +55,13 @@ export function Payments({ invoices }: PaymentsProps) {
       // Store complete transaction info with all payment details
       for (const log of logs) {
         // InvoicePaid(uint256 indexed id, uint256 amount, uint256 timestamp, string paymentTxHash, string observedInboundAmount)
-        const invoiceId = (log.args?.id as bigint | undefined)?.toString();
+        // Type assertion for wagmi v2 event logs
+        const logWithArgs = log as any;
+        const invoiceId = (logWithArgs.args?.id as bigint | undefined)?.toString();
         const txHash = log.transactionHash as string | undefined;
         
         // Access event args - wagmi uses array position or named access
-        const args = log.args as any;
+        const args = logWithArgs.args as any;
         const requestedAmount = args?.amount ? String(args.amount) : '0';
         const paymentTxHash = typeof args?.paymentTxHash === 'string' ? args.paymentTxHash : undefined;
         const observedAmount = typeof args?.observedInboundAmount === 'string' ? args.observedInboundAmount : undefined;

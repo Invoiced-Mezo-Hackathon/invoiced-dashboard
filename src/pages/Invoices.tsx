@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { X, CheckCircle, XCircle, QrCode, Clock } from 'lucide-react';
+import { X, CheckCircle, XCircle, QrCode, Clock, Eye } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { InvoiceQRModal } from '@/components/invoice/InvoiceQRModal';
@@ -102,6 +102,16 @@ export function Invoices({ invoices }: InvoicesProps) {
     e.stopPropagation();
     setQrInvoice(invoice);
     setShowQRModal(true);
+  };
+
+  const handleShowTransaction = (invoice: Invoice, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const txHash = (invoice as any).paymentTxHash || (invoice as any).txHash;
+    if (txHash) {
+      window.open(`https://explorer.test.mezo.org/tx/${txHash}`, '_blank');
+    } else {
+      toast.error('Transaction hash not available');
+    }
   };
 
   
@@ -343,7 +353,7 @@ export function Invoices({ invoices }: InvoicesProps) {
               {/* Dev payment debug removed for cleaner UX */}
 
               {/* Actions */}
-              {selectedInvoice.status === 'pending' && new Date(selectedInvoice.expiresAt).getTime() > Date.now() && (
+              {selectedInvoice.status === 'pending' && selectedInvoice.expiresAt && new Date(selectedInvoice.expiresAt).getTime() > Date.now() && (
                 <div className="flex gap-3 pt-4 border-t border-white/10">
                   <Button
                     onClick={handleMarkAsPaid}

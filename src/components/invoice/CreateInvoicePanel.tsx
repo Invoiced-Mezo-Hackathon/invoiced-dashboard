@@ -166,11 +166,12 @@ export function CreateInvoicePanel({ onInvoiceCreated }: CreateInvoicePanelProps
       }
 
       // Call smart contract - store the original currency and BTC amount
+      // Map BTC to USD for InvoiceFormData (contract expects 'USD' | 'KES')
       await createBlockchainInvoice({
         clientName,
         details,
         amount: finalBitcoinAmount.toString(), // Always BTC amount for on-chain storage
-        currency: inputCurrency, // Store the original currency (USD or BTC)
+        currency: inputCurrency === 'BTC' ? 'USD' : inputCurrency, // Map BTC to USD for contract
         bitcoinAddress,
         payToAddress: bitcoinAddress,
         balanceAtCreation,
