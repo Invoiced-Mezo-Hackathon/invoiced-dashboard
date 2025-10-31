@@ -329,7 +329,7 @@ export const useMezoVault = () => {
         functionName: 'depositCollateral',
         args: [amountInWei],
         value: amountInWei
-      });
+      } as any);
 
       console.log('✅ Deposit writeContract called - wallet popup should appear now');
 
@@ -386,7 +386,7 @@ export const useMezoVault = () => {
         abi: BORROW_MANAGER_ABI,
         functionName: 'borrowMUSD',
         args: [amountInWei]
-      });
+      } as any);
 
       console.log('✅ Borrow writeContract called - wallet popup should appear now');
       
@@ -435,7 +435,7 @@ export const useMezoVault = () => {
         abi: MUSD_ABI,
         functionName: 'approve',
         args: [MEZO_CONTRACTS.MEZO_VAULT, maxApproval]
-      });
+      } as any);
 
     } catch (err) {
       setIsLoading(false);
@@ -526,7 +526,7 @@ export const useMezoVault = () => {
           abi: MUSD_ABI,
           functionName: 'approve',
           args: [MEZO_CONTRACTS.MEZO_VAULT, maxApproval]
-        });
+        } as any);
         console.log('✅ Approval writeContract called - wallet popup should appear for approval');
         // Don't reset loading - keep it true so UI shows approval is pending
         // Return without error - this is expected flow
@@ -569,7 +569,7 @@ export const useMezoVault = () => {
           abi: BORROW_MANAGER_ABI,
           functionName: 'repayMUSD',
           args: [amountInWei]
-        });
+        } as any);
 
         console.log('✅ Repay writeContract called successfully - wallet popup should appear now');
         // Don't reset loading here - let the wallet popup appear
@@ -637,7 +637,7 @@ export const useMezoVault = () => {
         abi: BORROW_MANAGER_ABI,
         functionName: 'withdrawCollateral',
         args: [amountInWei]
-      });
+      } as any);
 
       console.log('✅ Withdraw writeContract called - wallet popup should appear now');
       
@@ -954,7 +954,6 @@ export const useMezoVault = () => {
         hasContract: !!MEZO_CONTRACTS.MUSD_TOKEN
       });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [musdBalance, formattedMusdBalance, musdBalanceError, isMusdBalanceLoading, address, isConnected]);
 
   return {

@@ -3,7 +3,7 @@ import { useAccount } from 'wagmi';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { User, Wallet, Download, SettingsIcon, Bell } from 'lucide-react';
+import { User, Wallet, Download, Bell } from 'lucide-react';
 import { useWalletUtils } from '@/hooks/useWalletUtils';
 import { toast } from 'react-hot-toast';
 import { SettingsSection } from '@/components/settings/SettingsSection';

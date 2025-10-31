@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { ArrowDownLeft, BarChart3, ExternalLink } from 'lucide-react';
 import { transactionStorage } from '@/services/transaction-storage';
 import { MEZO_EXPLORER_URL } from '@/lib/boar-config';
@@ -13,7 +13,7 @@ interface PaymentsProps {
 export function Payments({ invoices }: PaymentsProps) {
   const [bitcoinPrice, setBitcoinPrice] = useState<number>(0);
   const [version, setVersion] = useState(0); // trigger refresh when new events arrive
-  const notifiedTxsRef = useRef<Set<string>>(new Set());
+  // notifiedTxsRef no longer needed
 
   // Fetch real-time Bitcoin price
   useEffect(() => {

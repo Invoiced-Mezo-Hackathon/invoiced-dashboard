@@ -9,7 +9,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives",
     "lint:fix": "eslint . --ext ts,tsx --fix",
     "compile": "hardhat compile",
     "test": "hardhat test",

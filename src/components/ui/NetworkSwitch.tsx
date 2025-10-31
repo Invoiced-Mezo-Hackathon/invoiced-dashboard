@@ -1,7 +1,7 @@
 import { useAccount, useSwitchChain } from 'wagmi'
 import { Button } from './button'
 import { useWalletUtils } from '@/hooks/useWalletUtils'
-import { CheckCircle, AlertTriangle } from 'lucide-react'
+import { AlertTriangle } from 'lucide-react'
 
 interface NetworkSwitchProps {
   onShowModal?: () => void

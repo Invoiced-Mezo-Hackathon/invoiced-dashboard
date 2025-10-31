@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { TrendingUp, Clock, Vault, Activity, DollarSign, Users, FileText, CreditCard } from 'lucide-react';
+import { TrendingUp, Clock, Vault, Activity, DollarSign, Users, FileText } from 'lucide-react';
 import type { Invoice, InvoiceStats as InvoiceStatsType } from '@/types/invoice';
 import { useAccount, useWatchContractEvent } from 'wagmi';
 import { MEZO_CONTRACTS, INVOICE_CONTRACT_ABI, BORROW_MANAGER_ABI } from '@/lib/mezo';
@@ -16,8 +16,8 @@ interface DashboardProps {
 }
 
 export function Dashboard({ onNavigate, invoices, stats }: DashboardProps) {
-  const { address, isConnected } = useAccount();
-  const { refetchAll: refetchVault, vaultData, musdBalance, collateralBalance, borrowedAmount } = useMezoVault();
+  const { address: _address, isConnected: _isConnected } = useAccount();
+  const { refetchAll: refetchVault } = useMezoVault();
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [bitcoinPrice, setBitcoinPrice] = useState<number>(0);
   const [isLoadingPrice, setIsLoadingPrice] = useState(true);
@@ -212,14 +212,7 @@ export function Dashboard({ onNavigate, invoices, stats }: DashboardProps) {
     return stats?.totalInvoices ?? invoices.length;
   }, [invoices, stats?.totalInvoices]);
 
-  const pendingAmount = useMemo(() => {
-    if (stats?.pendingAmount && stats.pendingAmount > 0) {
-      return stats.pendingAmount;
-    }
-    return invoices
-      .filter(invoice => invoice.status === 'pending')
-      .reduce((sum, invoice) => sum + invoice.amount, 0);
-  }, [invoices, stats?.pendingAmount]);
+  // pending amount is computed upstream and not displayed here
 
   // Calculate paid invoices count and collection metrics
   const paidInvoicesCount = useMemo(() => {

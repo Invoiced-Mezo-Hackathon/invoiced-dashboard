@@ -393,7 +393,7 @@ class PaymentMonitorService {
   }
 
   // Confirm if an invoice has been paid using Boar RPC
-  async confirmInvoicePaid(invoice: Invoice): Promise<{ confirmed: boolean; amount: string; error?: string }> {
+  async confirmInvoicePaid(invoice: Invoice): Promise<{ confirmed: boolean; amount: string; error?: string; transaction?: StoredTransaction }> {
     try {
       console.log('🔍 ===== PAYMENT CONFIRMATION DEBUG =====');
       console.log('🔍 Checking payment for invoice:', invoice.id);
