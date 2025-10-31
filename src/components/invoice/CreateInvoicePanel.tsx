@@ -73,7 +73,7 @@ export function CreateInvoicePanel({ onInvoiceCreated }: CreateInvoicePanelProps
     };
   }, [isDropdownOpen]);
 
-  // Auto-fill Mezo testnet address from connected wallet
+  // Auto-fill receiving address from connected wallet
   useEffect(() => {
     if (address) {
       setBitcoinAddress(address);
@@ -136,12 +136,12 @@ export function CreateInvoicePanel({ onInvoiceCreated }: CreateInvoicePanelProps
     }
 
     if (!bitcoinAddress.trim()) {
-      toast.error('Please enter a Mezo testnet address');
+      toast.error('Please enter a receiving address');
       return;
     }
 
     if (!isValidMezoAddress(bitcoinAddress)) {
-      toast.error('Please enter a valid Mezo testnet address (0x...)');
+      toast.error('Please enter a valid receiving address (0x...)');
       return;
     }
 
@@ -360,7 +360,7 @@ export function CreateInvoicePanel({ onInvoiceCreated }: CreateInvoicePanelProps
               {/* Wallet Address */}
               <div>
                 <label className="block text-sm font-medium text-white/80 mb-2 font-navbar">
-                  Mezo Testnet Address *
+                  Receiving address *
                 </label>
                 <input
                   type="text"
@@ -371,7 +371,7 @@ export function CreateInvoicePanel({ onInvoiceCreated }: CreateInvoicePanelProps
                   readOnly={!!address}
                 />
                 <p className="text-xs text-white/60 mt-1 font-navbar">
-                  Enter your Mezo testnet address to receive Bitcoin payments
+                  Auto-detected from your connected wallet
                 </p>
               </div>
 
