@@ -359,7 +359,7 @@ export function CreateInvoicePanel({ onInvoiceCreated }: CreateInvoicePanelProps
               {/* Wallet Address */}
               <div>
                 <label className="block text-sm font-medium text-white/80 mb-2 font-navbar">
-                  Wallet Address *
+                  Mezo Testnet Address *
                 </label>
                 <input
                   type="text"
@@ -370,7 +370,7 @@ export function CreateInvoicePanel({ onInvoiceCreated }: CreateInvoicePanelProps
                   readOnly={!!address}
                 />
                 <p className="text-xs text-white/60 mt-1 font-navbar">
-                  {address ? 'Auto detected' : 'Enter wallet address to receive payments'}
+                  Enter your Mezo testnet address to receive Bitcoin payments
                 </p>
               </div>
 

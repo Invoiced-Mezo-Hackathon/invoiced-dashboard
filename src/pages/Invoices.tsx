@@ -121,7 +121,7 @@ export function Invoices({ invoices }: InvoicesProps) {
       {/* Status Filter */}
       <div className="mb-6">
         <div className="flex flex-wrap gap-2">
-          {(['all', 'pending', 'paid', 'cancelled', 'expired'] as const).map((status) => (
+          {(['all', 'pending', 'paid', 'cancelled'] as const).map((status) => (
             <button
               key={status}
               onClick={() => setStatusFilter(status)}
@@ -166,7 +166,15 @@ export function Invoices({ invoices }: InvoicesProps) {
                 >
                   <QrCode className="w-4 h-4 text-white" />
                 </button>
-                
+                {invoice.status === 'paid' && (
+                  <button
+                    onClick={(e) => handleShowTransaction(invoice, e)}
+                    className="w-8 h-8 rounded-lg border border-green-400/30 bg-green-500/10 hover:bg-green-500/20 transition-all flex items-center justify-center"
+                    title="View Transaction Details"
+                  >
+                    <Eye className="w-4 h-4 text-white" />
+                  </button>
+                )}
                 {invoice.status === 'pending' && (
                   <button
                     onClick={(e) => {
@@ -184,8 +192,7 @@ export function Invoices({ invoices }: InvoicesProps) {
                     "px-3 py-1 rounded-full text-xs font-navbar font-medium border",
                     invoice.status === 'paid' && "bg-green-500/10 text-green-400 border-green-400/20",
                     invoice.status === 'pending' && "bg-yellow-500/10 text-yellow-400 border-yellow-400/20",
-                    invoice.status === 'cancelled' && "bg-red-500/10 text-red-400 border-red-400/20",
-                    (invoice as any).status === 'expired' && "bg-gray-500/10 text-gray-300 border-gray-400/20"
+                    invoice.status === 'cancelled' && "bg-red-500/10 text-red-400 border-red-400/20"
                   )}
                 >
                   {invoice.status}
@@ -195,43 +202,14 @@ export function Invoices({ invoices }: InvoicesProps) {
             
             <div className="flex items-center justify-between mb-4">
               <div>
-                {invoice.currency === 'BTC' ? (
-                  <>
-                    <p className="text-2xl font-bold font-navbar mb-1 text-white">
-                      {invoice.amount.toFixed(8)} BTC
-                    </p>
-                    <p className="text-sm font-navbar text-white/60">
-                      {isLoadingPrice ? 'Loading USD...' : `$${(invoice.amount * (bitcoinPrice || 0)).toFixed(2)} USD`}
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <p className="text-2xl font-bold font-navbar mb-1 text-white">
-                      ${(invoice.amount * (bitcoinPrice || 0)).toFixed(2)} USD
-                    </p>
-                    <p className="text-sm font-navbar text-white/60">
-                      {invoice.amount.toFixed(8)} BTC
-                    </p>
-                  </>
-                )}
+                <p className="text-2xl font-bold font-navbar mb-1 text-white">
+                  {invoice.amount.toFixed(8)} BTC
+                </p>
+                <p className="text-sm font-navbar text-white/60">${invoice.musdAmount.toFixed(2)} USD</p>
               </div>
               <div className="text-right">
                 <p className="text-xs font-navbar text-white/50 mb-1">Created</p>
                 <p className="text-sm font-navbar text-white/70">{new Date(invoice.createdAt).toLocaleDateString()}</p>
-                {/* Timer for pending invoices */}
-                {invoice.status === 'pending' && invoice.expiresAt && (
-                  <InvoiceTimer 
-                    expiresAt={invoice.expiresAt} 
-                    onExpire={() => {
-                      // Toast for any invoice reaching expiry
-                      toast.error('Invoice expired');
-                      // For local drafts, persist expired state
-                      if (invoice.id.startsWith('draft_')) {
-                        invoiceStorage.markAsExpired(invoice.id);
-                      }
-                    }}
-                  />
-                )}
               </div>
             </div>
 

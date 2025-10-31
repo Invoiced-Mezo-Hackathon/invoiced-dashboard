@@ -217,7 +217,35 @@ export function Settings() {
       </div>
 
       <div className="max-w-3xl mx-auto space-y-4">
-        {/* Profile Section - Moved to top */}
+        {/* Wallet Info - Now First */}
+        <SettingsSection
+          title="Wallet"
+          description="Your connected wallet information"
+          icon={Wallet}
+          iconBgColor="bg-green-500/10"
+          iconColor="text-green-400"
+        >
+          <div className="space-y-4">
+            <div className="flex items-center justify-between p-4 rounded-xl bg-[#2C2C2E]/20 border border-green-400/10">
+              <div>
+                <p className="text-sm text-white/60 mb-1 font-navbar">Connected Wallet</p>
+                <p className="font-mono text-sm text-white">{formatAddress(address!)}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-green-400"></div>
+                <span className="text-xs text-green-400 font-navbar">Connected</span>
+              </div>
+            </div>
+            <div className="flex items-center justify-between p-4 rounded-xl bg-[#2C2C2E]/20 border border-green-400/10">
+              <div>
+                <p className="text-sm text-white/60 mb-1 font-navbar">Network</p>
+                <p className="text-sm font-medium text-white font-navbar">{getNetworkName(chainId)}</p>
+              </div>
+            </div>
+          </div>
+        </SettingsSection>
+
+        {/* Profile Section */}
         <SettingsSection
           title="Profile"
           description="Customize your identity"

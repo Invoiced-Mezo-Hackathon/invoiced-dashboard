@@ -40,7 +40,6 @@ export function Vault() {
     isBorrowSuccess,
     isRepaySuccess,
     isWithdrawSuccess,
-    isApprovalSuccess,
     isDepositConfirming,
     isBorrowConfirming,
     isRepayConfirming,
@@ -51,7 +50,6 @@ export function Vault() {
     withdrawHash,
     approvalHash,
     musdAllowance,
-    pendingRepayAmount, // For showing auto-repay status
     refetchAll,
     isMusdBalanceLoading,
     maxWithdrawable,
@@ -69,6 +67,38 @@ export function Vault() {
     setNotifiedRepay(false);
     setNotifiedWithdraw(false);
   }, [activeAction, refetchAll]);
+
+  // Visual configuration for action buttons (colors and icons)
+  const actionStyles: Record<Exclude<VaultAction, null>, { bg: string; border: string; hoverBg: string; hoverBorder: string; iconClass: string; }> = {
+    deposit: {
+      bg: 'bg-blue-500/20',
+      border: 'border-blue-400/30',
+      hoverBg: 'hover:bg-blue-500/30',
+      hoverBorder: 'hover:border-blue-400/50',
+      iconClass: 'fa-solid fa-circle-down',
+    },
+    borrow: {
+      bg: 'bg-green-500/20',
+      border: 'border-green-400/30',
+      hoverBg: 'hover:bg-green-500/30',
+      hoverBorder: 'hover:border-green-400/50',
+      iconClass: 'fa-solid fa-hand-holding-dollar',
+    },
+    repay: {
+      bg: 'bg-yellow-500/20',
+      border: 'border-yellow-400/30',
+      hoverBg: 'hover:bg-yellow-500/30',
+      hoverBorder: 'hover:border-yellow-400/50',
+      iconClass: 'fa-solid fa-rotate-left',
+    },
+    withdraw: {
+      bg: 'bg-orange-500/20',
+      border: 'border-orange-400/30',
+      hoverBg: 'hover:bg-orange-500/30',
+      hoverBorder: 'hover:border-orange-400/50',
+      iconClass: 'fa-solid fa-arrow-up-from-bracket',
+    },
+  };
 
   // One-shot notifications per success state
   useEffect(() => {
@@ -233,38 +263,6 @@ export function Vault() {
     }
   };
 
-  // Visual configuration for action buttons (colors and icons)
-  const actionStyles: Record<Exclude<VaultAction, null>, { bg: string; border: string; hoverBg: string; hoverBorder: string; iconClass: string; }> = {
-    deposit: {
-      bg: 'bg-blue-500/20',
-      border: 'border-blue-400/30',
-      hoverBg: 'hover:bg-blue-500/30',
-      hoverBorder: 'hover:border-blue-400/50',
-      iconClass: 'fa-solid fa-circle-down',
-    },
-    borrow: {
-      bg: 'bg-green-500/20',
-      border: 'border-green-400/30',
-      hoverBg: 'hover:bg-green-500/30',
-      hoverBorder: 'hover:border-green-400/50',
-      iconClass: 'fa-solid fa-hand-holding-dollar',
-    },
-    repay: {
-      bg: 'bg-yellow-500/20',
-      border: 'border-yellow-400/30',
-      hoverBg: 'hover:bg-yellow-500/30',
-      hoverBorder: 'hover:border-yellow-400/50',
-      iconClass: 'fa-solid fa-rotate-left',
-    },
-    withdraw: {
-      bg: 'bg-orange-500/20',
-      border: 'border-orange-400/30',
-      hoverBg: 'hover:bg-orange-500/30',
-      hoverBorder: 'hover:border-orange-400/50',
-      iconClass: 'fa-solid fa-arrow-up-from-bracket',
-    },
-  };
-
   return (
     <div className="flex-1 h-screen overflow-y-auto p-4 sm:p-6 lg:p-8">
       <div className="mb-6">
@@ -379,11 +377,12 @@ export function Vault() {
           </div>
         </div>
 
+        {/* Action Buttons (removed from here; moved to top) */}
 
         {/* Value Display */}
         <div className="bg-[#2C2C2E]/40 backdrop-blur-xl p-6 rounded-2xl border border-green-400/10">
           <div className="flex items-center justify-between">
-            <div className="flex-1">
+            <div>
               <p className="text-sm font-navbar text-white/60 mb-1">MUSD Balance</p>
               <p className="text-3xl font-bold font-navbar">{musdBalance} MUSD</p>
               {parseFloat(musdBalance) > 0 && (
@@ -392,8 +391,7 @@ export function Vault() {
             </div>
             <div className="text-right">
               <p className="text-sm font-navbar text-white/60 mb-1">Interest Rate</p>
-              <p className="text-2xl font-bold font-navbar text-green-400">{interestRate}%</p>
-              <p className="text-xs font-navbar text-white/50 mt-1">APR (Fixed)</p>
+              <p className="text-2xl font-bold font-navbar text-green-400">{vaultData?.interestRate || 0}%</p>
             </div>
           </div>
 
@@ -455,25 +453,12 @@ export function Vault() {
         )}
 
         {/* Pending Transaction Notifications - Stage-Specific */}
-        {approvalHash && isPending && (
-          <div className="glass p-4 rounded-2xl border border-orange-500/20 bg-orange-500/10">
-            <div className="flex items-center gap-2">
-              <Loader2 className="w-5 h-5 text-orange-400 animate-spin" />
-              <div>
-                <p className="text-orange-400 font-semibold">🔐 Approving MUSD...</p>
-                <p className="text-orange-300 text-sm">Setting up permission to repay your loan</p>
-                <a href={`https://explorer.test.mezo.org/tx/${approvalHash}`} target="_blank" rel="noopener noreferrer" className="text-orange-300 text-xs underline hover:text-orange-200 inline-block mt-1">📄 View Transaction →</a>
-              </div>
-            </div>
-          </div>
-        )}
-
         {depositHash && isPending && (
           <div className="bg-[#2C2C2E]/40 backdrop-blur-xl p-4 rounded-2xl border border-green-500/20 bg-green-500/10">
             <div className="flex items-center gap-2">
               <Loader2 className="w-5 h-5 text-green-400 animate-spin" />
               <div>
-                <p className="text-green-400 font-semibold font-navbar">📤 Depositing {actionAmount || '0'} BTC...</p>
+                <p className="text-green-400 font-semibold font-navbar">📤 Depositing {actionAmount} BTC...</p>
                 <p className="text-green-300 text-sm font-navbar">Your BTC is being secured in the vault</p>
                 <a href={`https://explorer.test.mezo.org/tx/${depositHash}`} target="_blank" rel="noopener noreferrer" className="text-green-300 text-xs font-navbar underline hover:text-green-200 inline-block mt-1">📄 View Transaction →</a>
               </div>
@@ -486,9 +471,8 @@ export function Vault() {
             <div className="flex items-center gap-2">
               <Loader2 className="w-5 h-5 text-green-400 animate-spin" />
               <div>
-                <p className="text-green-400 font-semibold font-navbar">💰 Borrowing {actionAmount || '0'} MUSD...</p>
+                <p className="text-green-400 font-semibold font-navbar">💰 Borrowing {actionAmount} MUSD...</p>
                 <p className="text-green-300 text-sm font-navbar">Minting MUSD tokens for your wallet</p>
-                <p className="text-green-300 text-xs font-navbar mt-1">📊 Current MUSD Balance: {musdBalance} MUSD {parseFloat(musdBalance) === 0 && '(updating...)'}</p>
                 <a href={`https://explorer.test.mezo.org/tx/${borrowHash}`} target="_blank" rel="noopener noreferrer" className="text-green-300 text-xs font-navbar underline hover:text-green-200 inline-block mt-1">📄 View Transaction →</a>
               </div>
             </div>
@@ -500,9 +484,8 @@ export function Vault() {
             <div className="flex items-center gap-2">
               <Loader2 className="w-5 h-5 text-green-400 animate-spin" />
               <div>
-                <p className="text-green-400 font-semibold font-navbar">💸 Repaying {actionAmount || '0'} MUSD...</p>
+                <p className="text-green-400 font-semibold font-navbar">💸 Repaying {actionAmount} MUSD...</p>
                 <p className="text-green-300 text-sm font-navbar">Burning MUSD tokens and clearing your debt</p>
-                <p className="text-green-300 text-xs font-navbar mt-1">💰 Remaining MUSD Balance: {musdBalance} MUSD {parseFloat(musdBalance) === 0 && '(updating...)'}</p>
                 <a href={`https://explorer.test.mezo.org/tx/${repayHash}`} target="_blank" rel="noopener noreferrer" className="text-green-300 text-xs font-navbar underline hover:text-green-200 inline-block mt-1">📄 View Transaction →</a>
               </div>
             </div>
@@ -514,9 +497,8 @@ export function Vault() {
             <div className="flex items-center gap-2">
               <Loader2 className="w-5 h-5 text-green-400 animate-spin" />
               <div>
-                <p className="text-green-400 font-semibold font-navbar">📥 Withdrawing {actionAmount || '0'} BTC...</p>
+                <p className="text-green-400 font-semibold font-navbar">📥 Withdrawing {actionAmount} BTC...</p>
                 <p className="text-green-300 text-sm font-navbar">Returning your BTC from vault to wallet</p>
-                <p className="text-green-300 text-xs font-navbar mt-1">💰 Your MUSD Balance: {musdBalance} MUSD</p>
                 <a href={`https://explorer.test.mezo.org/tx/${withdrawHash}`} target="_blank" rel="noopener noreferrer" className="text-green-300 text-xs font-navbar underline hover:text-green-200 inline-block mt-1">📄 View Transaction →</a>
               </div>
             </div>
@@ -524,76 +506,15 @@ export function Vault() {
         )}
 
         {/* Action-Specific Success Popups */}
-        {isApprovalSuccess && pendingRepayAmount && (
-          <div className="glass p-4 rounded-2xl border border-green-500/20 bg-green-500/10 animate-pulse">
-            <div className="flex items-center gap-2">
-              <Loader2 className="w-5 h-5 text-green-400 animate-spin" />
-              <div>
-                <p className="text-green-400 font-semibold">✓ MUSD Approved Successfully!</p>
-                <p className="text-green-300 text-sm mt-1">🔄 Automatically triggering repay...</p>
-                <p className="text-green-300 text-sm">💰 Wallet popup will appear shortly</p>
-                <p className="text-green-300 text-xs mt-1">💼 Your MUSD Balance: {musdBalance} MUSD</p>
-              </div>
-            </div>
-          </div>
-        )}
-        
-        {isApprovalSuccess && !pendingRepayAmount && (
-          <div className="glass p-4 rounded-2xl border border-green-500/20 bg-green-500/10 animate-pulse">
-            <div className="flex items-center gap-2">
-              <CheckCircle className="w-5 h-5 text-green-400" />
-              <div>
-                <p className="text-green-400 font-semibold">✓ MUSD Approved Successfully!</p>
-                <p className="text-green-300 text-sm mt-1">🔐 You can now repay your loan</p>
-                <p className="text-green-300 text-xs mt-1">💼 Your MUSD Balance: {musdBalance} MUSD</p>
-                <Button
-                  onClick={() => {
-                    // Trigger repay after approval
-                    if (actionAmount) {
-                      repayMUSD(actionAmount).catch(err => {
-                        console.error('Repay failed:', err);
-                      });
-                    }
-                  }}
-                  className="mt-2 bg-green-500 hover:bg-green-600 text-white text-xs px-3 py-1"
-                >
-                  💸 Complete Repay Now
-                </Button>
-                {approvalHash && (
-                  <a 
-                    href={`https://explorer.test.mezo.org/tx/${approvalHash}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-green-300 text-xs underline hover:text-green-200 inline-block mt-1"
-                  >
-                    📄 View Approval Transaction →
-                  </a>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
         {isDepositSuccess && (
           <div className="bg-[#2C2C2E]/40 backdrop-blur-xl p-4 rounded-2xl border border-green-500/20 bg-green-500/10">
             <div className="flex items-center gap-2">
               <CheckCircle className="w-5 h-5 text-green-400" />
               <div>
                 <p className="text-green-400 font-semibold font-navbar">✓ BTC Deposited Successfully!</p>
-                <p className="text-green-300 text-sm mt-1">📦 Vault now holds: {collateralBalance || '0'} BTC</p>
-                <p className="text-green-300 text-sm">💼 Available to borrow: ~{collateralBalance && !isNaN(parseFloat(collateralBalance)) ? Math.floor(parseFloat(collateralBalance) * 50000 * 0.9) : '0'} MUSD</p>
-                <p className="text-green-300 text-sm">🔒 Collateral ratio: {Number.isFinite(collateralRatio) ? collateralRatio.toFixed(2) : '0.00'}% (Safe)</p>
-                <div className="mt-3">
-                  <Button
-                    onClick={() => {
-                      setActiveAction(null);
-                      setActionAmount('');
-                    }}
-                    className="bg-green-500 hover:bg-green-600 text-white text-xs px-4 py-2 font-navbar"
-                  >
-                    ✓ Got it
-                  </Button>
-                </div>
+                <p className="text-green-300 text-sm mt-1">📦 Vault now holds: {collateralBalance} BTC</p>
+                <p className="text-green-300 text-sm">💼 Available to borrow: ~{collateralBalance && !isNaN(parseFloat(collateralBalance)) ? Math.floor(parseFloat(collateralBalance) * 50000 * 0.9) : 0} MUSD</p>
+                <p className="text-green-300 text-sm">🔒 Collateral ratio: {collateralRatio.toFixed(2)}% (Safe)</p>
                 {depositHash && (
                   <a 
                     href={`https://explorer.test.mezo.org/tx/${depositHash}`}
