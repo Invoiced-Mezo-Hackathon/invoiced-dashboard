@@ -10,7 +10,7 @@ export function Header({ onShowNetworkModal }: HeaderProps) {
     <div className="fixed right-2 sm:right-4 top-2 sm:top-4 z-50">
       <div className="flex items-center gap-2">
         <NotificationBell />
-      <WalletStatus onShowNetworkModal={onShowNetworkModal} />
+        <WalletStatus onShowNetworkModal={onShowNetworkModal} />
       </div>
     </div>
   );
