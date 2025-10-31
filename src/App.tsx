@@ -101,8 +101,8 @@ function App() {
   };
 
   return (
-    <>
-      <div className="flex h-screen bg-[#1C1C1E] text-foreground overflow-hidden">
+    <ToastProvider>
+      <div className="flex h-screen bg-background text-foreground overflow-hidden safe-area-inset">
         {/* Sidebar */}
         <Sidebar 
           activeTab={activeTab} 
@@ -111,14 +111,14 @@ function App() {
         />
         
         {/* Main Content Area */}
-        <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="flex-1 flex flex-col overflow-hidden lg:ml-0">
           {/* Header */}
           <Header 
             onShowNetworkModal={() => setShowNetworkModal(true)}
           />
           
           {/* Page Content */}
-          <div className="flex-1 overflow-auto">
+          <div className="flex-1 overflow-auto pt-12 sm:pt-16 lg:pt-4">
             {renderContent()}
           </div>
         </div>

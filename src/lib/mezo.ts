@@ -27,12 +27,12 @@ export interface MezoTransaction {
 // Mezo Testnet Contract Addresses
 // These are the actual deployed addresses on Mezo testnet
 export const MEZO_CONTRACTS = {
-  MUSD_TOKEN: '0x7D546f04169F45779215015FFa9e8c9215927D32', // MUSD Token (verified)
+  MUSD_TOKEN: '0x5987aA39B41E961c9683901BfF50f87C88C839a9', // MUSD Token (verified)
   BORROW_MANAGER: '0x1234567890123456789012345678901234567890', // Placeholder - will be updated after deployment
   STABILITY_POOL: '0x1234567890123456789012345678901234567890', // Placeholder - will be updated after deployment
   TROVE_MANAGER: '0x1234567890123456789012345678901234567890', // Placeholder - will be updated after deployment
-  MEZO_VAULT: '0x5294E4C68c928E84E73E3626635bbFB28B0a76A2', // Our custom vault contract - will be updated after deployment
-  INVOICE_CONTRACT: '0xaa74f433D9A4BEE15d3c5f954675036B5e2b06F6', // Latest deployment on Mezo testnet
+  MEZO_VAULT: '0xE4e18d7AED75FCB48ee20822B5880086DcA0724a', // Our custom vault contract - will be updated after deployment
+  INVOICE_CONTRACT: '0x2992a9765D1c95684BB8167cA82970Bf69a94675', // Latest deployment on Mezo testnet
 };
 
 // Contract ABIs for Mezo integration - using full compiled ABI for better compatibility

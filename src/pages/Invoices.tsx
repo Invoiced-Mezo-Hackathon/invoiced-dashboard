@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { X, CheckCircle, XCircle, QrCode, Clock } from 'lucide-react';
+import { X, CheckCircle, XCircle, QrCode, Clock, Eye } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { InvoiceQRModal } from '@/components/invoice/InvoiceQRModal';
@@ -104,6 +104,16 @@ export function Invoices({ invoices }: InvoicesProps) {
     setShowQRModal(true);
   };
 
+  const handleShowTransaction = (invoice: Invoice, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const txHash = (invoice as any).paymentTxHash || (invoice as any).txHash;
+    if (txHash) {
+      window.open(`https://explorer.test.mezo.org/tx/${txHash}`, '_blank');
+    } else {
+      toast.error('Transaction hash not available');
+    }
+  };
+
   
 
   return (
@@ -126,10 +136,10 @@ export function Invoices({ invoices }: InvoicesProps) {
               key={status}
               onClick={() => setStatusFilter(status)}
               className={cn(
-                "px-4 py-2 rounded-full text-sm font-navbar font-medium transition-all capitalize border",
+                "px-3 sm:px-4 py-2.5 sm:py-2 rounded-full text-xs sm:text-sm font-navbar font-medium transition-all capitalize border min-h-[44px] touch-manipulation active:scale-95",
                 statusFilter === status
                   ? "bg-green-500/10 text-green-400 border-green-400/30"
-                  : "bg-[#2C2C2E]/60 text-white/60 border-transparent hover:bg-green-500/5 hover:border-green-400/10"
+                  : "bg-[#2C2C2E]/60 text-white/60 border-transparent hover:bg-green-500/5 hover:border-green-400/10 active:bg-green-500/10"
               )}
             >
               {status}
@@ -148,20 +158,20 @@ export function Invoices({ invoices }: InvoicesProps) {
         {filteredInvoices.map((invoice) => (
           <div
             key={invoice.id}
-            className="bg-[#2C2C2E]/40 backdrop-blur-xl border border-green-400/10 rounded-2xl p-5 hover:border-green-400/20 transition-all group"
+            className="bg-[#2C2C2E]/40 backdrop-blur-xl border border-green-400/10 rounded-xl sm:rounded-2xl p-4 sm:p-5 hover:border-green-400/20 transition-all group active:scale-[0.99] touch-manipulation"
           >
-            <div className="flex items-start justify-between mb-4">
-              <div className="flex-1">
-                <h3 className="text-lg font-semibold mb-2 group-hover:text-white transition-colors font-navbar text-white">
+            <div className="flex items-start justify-between mb-3 sm:mb-4 gap-2">
+              <div className="flex-1 min-w-0">
+                <h3 className="text-base sm:text-lg font-semibold mb-1 sm:mb-2 group-hover:text-white transition-colors font-navbar text-white truncate">
                   {invoice.clientName}
                 </h3>
-                <p className="text-xs font-navbar text-white/50 mb-2">{invoice.clientCode}</p>
-                <p className="text-sm font-navbar text-white/60">{invoice.details}</p>
+                <p className="text-xs font-navbar text-white/50 mb-1 sm:mb-2 truncate">{invoice.clientCode}</p>
+                <p className="text-xs sm:text-sm font-navbar text-white/60 line-clamp-2">{invoice.details}</p>
               </div>
-              <div className="flex items-center gap-2 ml-4">
+              <div className="flex items-center gap-1.5 sm:gap-2 ml-2 shrink-0">
                 <button
                   onClick={(e) => handleShowQR(invoice, e)}
-                  className="w-8 h-8 rounded-lg border border-green-400/30 bg-green-500/10 hover:bg-green-500/20 transition-all flex items-center justify-center group"
+                  className="w-9 h-9 sm:w-8 sm:h-8 rounded-lg border border-green-400/30 bg-green-500/10 hover:bg-green-500/20 active:bg-green-500/30 transition-all flex items-center justify-center group touch-manipulation min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0"
                   title="Share QR Code"
                 >
                   <QrCode className="w-4 h-4 text-white" />
@@ -181,7 +191,7 @@ export function Invoices({ invoices }: InvoicesProps) {
                       e.stopPropagation();
                       setShowCancelConfirm(invoice);
                     }}
-                    className="w-8 h-8 rounded-lg border border-red-400/30 bg-red-500/10 hover:bg-red-500/20 transition-all flex items-center justify-center"
+                    className="w-9 h-9 sm:w-8 sm:h-8 rounded-lg border border-red-400/30 bg-red-500/10 hover:bg-red-500/20 active:bg-red-500/30 transition-all flex items-center justify-center touch-manipulation min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0"
                     title="Cancel Invoice"
                   >
                     <XCircle className="w-4 h-4 text-white" />
@@ -222,7 +232,7 @@ export function Invoices({ invoices }: InvoicesProps) {
               </div>
               <button
                 onClick={() => setSelectedInvoice(invoice)}
-                className="px-4 py-2 rounded-full bg-green-500/10 border border-green-400/30 hover:bg-green-500/20 hover:border-green-400/50 transition-all text-sm font-navbar font-medium text-white"
+                className="px-4 py-2.5 sm:py-2 rounded-full bg-green-500/10 border border-green-400/30 hover:bg-green-500/20 hover:border-green-400/50 active:bg-green-500/30 transition-all text-xs sm:text-sm font-navbar font-medium text-white min-h-[44px] touch-manipulation active:scale-95 w-full sm:w-auto"
               >
                 View Details
               </button>
@@ -251,10 +261,13 @@ export function Invoices({ invoices }: InvoicesProps) {
 
       {/* Invoice Details Modal */}
       {selectedInvoice && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-[#2C2C2E]/90 backdrop-blur-xl border border-green-400/20 p-6 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-3 sm:p-4 safe-area-inset">
+          <div className="bg-[#2C2C2E]/90 backdrop-blur-xl border border-green-400/20 p-4 sm:p-6 rounded-xl sm:rounded-2xl w-full max-w-2xl max-h-[95vh] sm:max-h-[90vh] overflow-y-auto mx-2 sm:mx-4">
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-semibold font-navbar text-white">Invoice Details</h3>
+              <h3 className="flex items-center gap-2 text-xl font-semibold font-navbar text-white">
+                <span className="text-[#F7931A] text-sm">₿</span>
+                Invoice Details
+              </h3>
               <button
                 onClick={() => setSelectedInvoice(null)}
                 className="text-white/60 hover:text-white transition-colors"
@@ -340,22 +353,22 @@ export function Invoices({ invoices }: InvoicesProps) {
               {/* Dev payment debug removed for cleaner UX */}
 
               {/* Actions */}
-              {selectedInvoice.status === 'pending' && new Date(selectedInvoice.expiresAt).getTime() > Date.now() && (
+              {selectedInvoice.status === 'pending' && selectedInvoice.expiresAt && new Date(selectedInvoice.expiresAt).getTime() > Date.now() && (
                 <div className="flex gap-3 pt-4 border-t border-white/10">
                   <Button
                     onClick={handleMarkAsPaid}
-                    className="flex-1 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 flex items-center gap-2"
+                    className="flex-1 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 active:from-green-700 active:to-green-800 flex items-center gap-2 min-h-[44px] touch-manipulation active:scale-95"
                   >
                     <CheckCircle className="w-4 h-4" />
-                    Mark as Paid
+                    <span className="text-sm sm:text-base">Mark as Paid</span>
                   </Button>
                   <Button
                     onClick={handleCancel}
                     variant="outline"
-                    className="flex-1 flex items-center gap-2"
+                    className="flex-1 flex items-center gap-2 min-h-[44px] touch-manipulation active:scale-95"
                   >
                     <XCircle className="w-4 h-4" />
-                    Cancel Invoice
+                    <span className="text-sm sm:text-base">Cancel Invoice</span>
                   </Button>
                 </div>
               )}

@@ -1,14 +1,14 @@
 {
   "network": "Mezo Testnet",
   "chainId": 31611,
-  "deployedAt": "2025-10-30T14:09:06.885Z",
+  "deployedAt": "2025-10-31T00:35:42.019Z",
   "deployer": "0xC065666d3108f877BeF3E94345aF2591d13F78ED",
   "contracts": {
-    "MUSDToken": "0x7D546f04169F45779215015FFa9e8c9215927D32",
-    "MezoVaultContract": "0x5294E4C68c928E84E73E3626635bbFB28B0a76A2"
+    "MUSDToken": "0x5987aA39B41E961c9683901BfF50f87C88C839a9",
+    "MezoVaultContract": "0xE4e18d7AED75FCB48ee20822B5880086DcA0724a"
   },
   "explorer": {
-    "musdToken": "https://explorer.test.mezo.org/address/0x7D546f04169F45779215015FFa9e8c9215927D32",
-    "vault": "https://explorer.test.mezo.org/address/0x5294E4C68c928E84E73E3626635bbFB28B0a76A2"
+    "musdToken": "https://explorer.test.mezo.org/address/0x5987aA39B41E961c9683901BfF50f87C88C839a9",
+    "vault": "https://explorer.test.mezo.org/address/0xE4e18d7AED75FCB48ee20822B5880086DcA0724a"
   }
 }

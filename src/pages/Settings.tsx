@@ -303,42 +303,22 @@ export function Settings() {
           iconBgColor="bg-green-500/10"
           iconColor="text-green-400"
         >
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-4">
+            <div className="flex items-center justify-between p-4 rounded-xl bg-[#2C2C2E]/20 border border-green-400/10">
             <div>
-              <Label htmlFor="paymentTerms" className="text-sm text-white/70 mb-2 block font-navbar">
-                Default Payment Terms (days)
-              </Label>
-              <select
-                id="paymentTerms"
-                value={defaultPaymentTerms}
-                onChange={(e) => setDefaultPaymentTerms(Number(e.target.value))}
-                className="w-full p-3 rounded-lg bg-[#2C2C2E]/40 backdrop-blur-xl border border-green-400/20 focus:border-green-400/40 text-white"
-                disabled={!isConnected}
-              >
-                <option value="7">7 days</option>
-                <option value="14">14 days</option>
-                <option value="30">30 days</option>
-                <option value="60">60 days</option>
-                <option value="90">90 days</option>
-              </select>
+                <p className="text-sm text-white/60 mb-1 font-navbar">Connected Wallet</p>
+                <p className="font-mono text-sm text-white">{formatAddress(address!)}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-green-400"></div>
+                <span className="text-xs text-green-400 font-navbar">Connected</span>
+              </div>
             </div>
-
+            <div className="flex items-center justify-between p-4 rounded-xl bg-[#2C2C2E]/20 border border-green-400/10">
             <div>
-              <Label htmlFor="taxRate" className="text-sm text-white/70 mb-2 block font-navbar">
-                Default Tax Rate (%)
-              </Label>
-              <Input
-                id="taxRate"
-                type="number"
-                min="0"
-                max="100"
-                step="0.1"
-                value={defaultTaxRate}
-                onChange={(e) => setDefaultTaxRate(parseFloat(e.target.value) || 0)}
-                className="bg-[#2C2C2E]/40 backdrop-blur-xl border border-green-400/20 focus:border-green-400/40 text-white placeholder:text-white/40"
-                placeholder="0"
-                disabled={!isConnected}
-              />
+                <p className="text-sm text-white/60 mb-1 font-navbar">Network</p>
+                <p className="text-sm font-medium text-white font-navbar">{getNetworkName(chainId)}</p>
+              </div>
             </div>
           </div>
         </SettingsSection>

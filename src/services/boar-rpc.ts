@@ -213,12 +213,12 @@ class BoarRPCClient {
         const end = Math.min(start + CHUNK_SIZE, latest);
         try {
           const result = await this.call<unknown>('eth_getLogs', [
-            {
-              address,
+        {
+          address,
               fromBlock: '0x' + start.toString(16),
               toBlock: end === latest ? 'latest' : ('0x' + end.toString(16)),
-            }
-          ]);
+        }
+      ]);
           const batch = (result as Array<{ transactionHash: string; topics: string[]; data: string; blockNumber: string; }>) || [];
           logsAll.push(...batch);
         } catch (e) {

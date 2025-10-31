@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt, useWatchContractEvent } from 'wagmi';
 import { parseEther, formatEther } from 'viem';
 import toast from 'react-hot-toast';
@@ -12,6 +12,7 @@ import {
   BlockchainInvoice 
 } from '@/types/invoice';
 import { MEZO_CONTRACTS, INVOICE_CONTRACT_ABI } from '@/lib/mezo';
+import { boarRPC } from '@/services/boar-rpc';
 import { paymentMonitor, PaymentEvent } from '@/services/payment-monitor';
 import { transactionStorage } from '@/services/transaction-storage';
 import { invoiceStorage, DraftInvoice } from '@/services/invoice-storage';
@@ -147,25 +148,46 @@ export function useInvoiceContract(): UseInvoiceContractReturn {
   });
 
   // Real-time: refresh on on-chain invoice events
+  const notifiedCreatedRef = useRef<Set<string>>(new Set());
+  const notifiedPaidRef = useRef<Set<string>>(new Set());
+
   useWatchContractEvent({
     address: MEZO_CONTRACTS.INVOICE_CONTRACT as `0x${string}`,
     abi: INVOICE_CONTRACT_ABI,
     eventName: 'InvoiceCreated',
-    onLogs: () => {
+    onLogs: (logs) => {
       refetchAllInvoices();
       if (address && isConnected) refetchUserInvoices();
-      toast.success('Client has been notified');
-      try { window.dispatchEvent(new CustomEvent('notify', { detail: { title: 'Invoice created', message: 'Client has been notified' } })); } catch {}
+      try {
+        for (const log of logs) {
+          const id = (log.args?.id as bigint | undefined)?.toString() || 'unknown';
+          if (!notifiedCreatedRef.current.has(id)) {
+            toast.success('Client has been notified');
+            // Bell notification: client received request and will pay within an hour
+            try { window.dispatchEvent(new CustomEvent('notify', { detail: { title: 'Invoice sent', message: 'Client received your request and will pay within 1 hour' } })); } catch {}
+            notifiedCreatedRef.current.add(id);
+          }
+        }
+      } catch {}
     }
   });
   useWatchContractEvent({
     address: MEZO_CONTRACTS.INVOICE_CONTRACT as `0x${string}`,
     abi: INVOICE_CONTRACT_ABI,
     eventName: 'InvoicePaid',
-    onLogs: () => {
+    onLogs: (logs) => {
       refetchAllInvoices();
       if (address && isConnected) refetchUserInvoices();
-      toast.success('Payment confirmed on-chain');
+      try {
+        for (const log of logs) {
+          const id = (log.args?.id as bigint | undefined)?.toString() || 'unknown';
+          if (!notifiedPaidRef.current.has(id)) {
+            toast.success('Payment confirmed on-chain');
+            // Do not push a bell notification here; the bell is emitted on user confirmPayment success
+            notifiedPaidRef.current.add(id);
+          }
+        }
+      } catch {}
     }
   });
   useWatchContractEvent({
@@ -325,9 +347,24 @@ export function useInvoiceContract(): UseInvoiceContractReturn {
       const totalCount = invoiceCountData ? Number(invoiceCountData as unknown as bigint) : 0;
       const paidCount = invoices.filter(inv => inv.status === 'paid').length;
       
+      // Fallback to local sums if on-chain stats are unavailable
+      const localTotalRevenue = invoices
+        .filter(inv => inv.status === 'paid')
+        .reduce((sum, inv) => {
+          const observed = (inv as any).observedInboundAmount as string | undefined;
+          if (observed && observed !== '0') {
+            try { return sum + Number(BigInt(observed)) / Math.pow(10, 18); } catch { return sum + inv.amount; }
+          }
+          return sum + inv.amount;
+        }, 0);
+
+      const localPending = invoices
+        .filter(inv => inv.status === 'pending')
+        .reduce((sum, inv) => sum + inv.amount, 0);
+
       setStats({
-        totalRevenue: (totalRevenue as unknown as bigint) ? parseFloat(formatEther(totalRevenue as unknown as bigint)) : 0,
-        pendingAmount: (pendingAmount as unknown as bigint) ? parseFloat(formatEther(pendingAmount as unknown as bigint)) : 0,
+        totalRevenue: (totalRevenue as unknown as bigint) ? parseFloat(formatEther(totalRevenue as unknown as bigint)) : localTotalRevenue,
+        pendingAmount: (pendingAmount as unknown as bigint) ? parseFloat(formatEther(pendingAmount as unknown as bigint)) : localPending,
         totalInvoices: totalCount,
         activeInvoices: totalCount - paidCount,
         paidInvoices: paidCount,
@@ -360,6 +397,18 @@ export function useInvoiceContract(): UseInvoiceContractReturn {
       const now = new Date();
       const expiresAt = new Date(now.getTime() + 60 * 60 * 1000); // 1 hour from now
       
+      // Snapshot balance at creation from Mezo RPC (wei)
+      const payAddr = (data.payToAddress || data.bitcoinAddress || '').trim();
+      let balanceSnapshotWei = '0';
+      try {
+        if (/^0x[a-fA-F0-9]{40}$/.test(payAddr)) {
+          const bal = await boarRPC.getAddressBalance(payAddr);
+          balanceSnapshotWei = String(bal.balance);
+        }
+      } catch (e) {
+        console.warn('Failed to snapshot balance at creation; defaulting to 0', e);
+      }
+
       const draft: DraftInvoice = {
         id: draftId,
         clientName: data.clientName,
@@ -377,7 +426,7 @@ export function useInvoiceContract(): UseInvoiceContractReturn {
         creator: address,
         recipient: address,
         requestedAmount: parseEther(data.amount).toString(),
-        balanceAtCreation: data.balanceAtCreation || '0', // Use provided balance snapshot
+        balanceAtCreation: balanceSnapshotWei, // Use measured balance snapshot (wei)
         syncPending: true, // Will try to sync to blockchain
       };
       
@@ -412,7 +461,7 @@ export function useInvoiceContract(): UseInvoiceContractReturn {
             Math.floor(expiresAt.getTime() / 1000), // expiresAt as Unix timestamp
             data.payToAddress || data.bitcoinAddress, // payToAddress
             data.currency, // currency
-            data.balanceAtCreation || '0' // balanceAtCreation
+            balanceSnapshotWei // balanceAtCreation
           ]);
           
           const hash = await createInvoiceWrite({
@@ -429,7 +478,7 @@ export function useInvoiceContract(): UseInvoiceContractReturn {
               Math.floor(expiresAt.getTime() / 1000), // expiresAt as Unix timestamp
               data.payToAddress || data.bitcoinAddress, // payToAddress
               data.currency, // currency
-              data.balanceAtCreation || '0' // balanceAtCreation
+              balanceSnapshotWei // balanceAtCreation
             ],
           });
           
@@ -716,12 +765,16 @@ export function useInvoiceContract(): UseInvoiceContractReturn {
   }, []);
   
   // Manual confirmation only - notify on detection, user clicks Mark as Paid to confirm
+  const notifiedDetectedRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     const handlePaymentDetected = async (event: PaymentEvent) => {
       if (event.type === 'payment_detected' && event.transaction) {
         console.log('💰 Payment detected event received for invoice:', event.invoiceId);
-        toast.success('Client payment detected. Click "Mark as Paid" to confirm.');
-        try { window.dispatchEvent(new CustomEvent('notify', { detail: { title: 'Payment detected', message: 'Click Mark as Paid to confirm' } })); } catch {}
+        if (!notifiedDetectedRef.current.has(event.invoiceId)) {
+          toast.success('Client payment detected. Click "Mark as Paid" to confirm.');
+          // Do not add bell notification for detection; keep bell for explicit user actions
+          notifiedDetectedRef.current.add(event.invoiceId);
+        }
       }
     };
 
@@ -808,6 +861,7 @@ export function useInvoiceContract(): UseInvoiceContractReturn {
         
         // Notify that client has been notified (assumes invoice delivery)
         toast.success('Client has been notified');
+        try { window.dispatchEvent(new CustomEvent('notify', { detail: { title: 'Invoice sent', message: 'Client received your request and will pay within 1 hour' } })); } catch {}
 
         // Refresh blockchain data to get the real blockchain invoice (will replace the temporary one)
         refetchAllInvoices();
