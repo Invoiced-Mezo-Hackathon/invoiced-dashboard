@@ -777,7 +777,17 @@ export function useInvoiceContract(): UseInvoiceContractReturn {
       } else {
         console.log('❌ Payment verification failed:', verificationResult.error);
         confirmingInvoiceIdRef.current = null; // Clear ref on verification failure
-        toast.error(`Payment verification failed: ${verificationResult.error || 'No payment detected. Make sure BTC was sent to the invoice address.'}`);
+        
+        // Check if it's a partial payment
+        if (verificationResult.error === 'PARTIAL_PAYMENT') {
+          toast.error('⏳ Waiting for client to complete transaction. Partial payment received.', {
+            duration: 5000,
+            icon: '⚠️',
+          });
+        } else {
+          toast.error(`Payment verification failed: ${verificationResult.error || 'No payment detected. Make sure BTC was sent to the invoice address.'}`);
+        }
+        
         setConfirmTx({ status: 'error', error: verificationResult.error });
       }
       

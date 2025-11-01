@@ -57,8 +57,30 @@ export function NotificationBell() {
   const [items, setItems] = useState<AppNotification[]>([]);
   const itemsRef = useRef<AppNotification[]>([]);
   const recentKeysRef = useRef<Map<string, number>>(new Map());
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { itemsRef.current = items; }, [items]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    if (!open) return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+
+    // Add event listener after a short delay to avoid immediate closure
+    const timeoutId = setTimeout(() => {
+      document.addEventListener('mousedown', handleClickOutside);
+    }, 0);
+
+    return () => {
+      clearTimeout(timeoutId);
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [open]);
 
   // Load on mount and when address changes, sort by timestamp (newest first)
   useEffect(() => {
@@ -131,7 +153,7 @@ export function NotificationBell() {
   };
 
   return (
-    <div className="relative">
+    <div className="relative" ref={dropdownRef}>
       <button
         className="relative w-10 h-10 sm:w-9 sm:h-9 rounded-full bg-white/10 border border-white/20 hover:bg-white/20 active:bg-white/30 flex items-center justify-center text-white min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 touch-manipulation transition-all active:scale-95"
         onClick={() => setOpen(v => !v)}
