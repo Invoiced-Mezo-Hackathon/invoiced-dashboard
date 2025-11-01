@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useAccount, useSwitchChain } from 'wagmi'
+import { useAccount, useSwitchChain, useAddChain } from 'wagmi'
 import { Button } from './button'
 import { X, ExternalLink, AlertCircle, CheckCircle } from 'lucide-react'
 
@@ -8,18 +8,64 @@ interface NetworkSwitchModalProps {
   onClose: () => void
 }
 
+// Mezo Testnet chain configuration for adding to wallet
+const mezoTestnetChain = {
+  id: 31611,
+  name: 'Mezo Testnet',
+  nativeCurrency: {
+    name: 'Bitcoin',
+    symbol: 'BTC',
+    decimals: 18,
+  },
+  rpcUrls: {
+    default: {
+      http: ['https://rpc.test.mezo.org'],
+    },
+  },
+  blockExplorers: {
+    default: {
+      name: 'Mezo Explorer',
+      url: 'https://explorer.test.mezo.org',
+    },
+  },
+  testnet: true,
+}
+
 export function NetworkSwitchModal({ isOpen, onClose }: NetworkSwitchModalProps) {
   const { chain } = useAccount()
-  const { switchChain, isPending } = useSwitchChain()
+  const { switchChain, isPending: isSwitchPending } = useSwitchChain()
+  const { addChain, isPending: isAddPending } = useAddChain()
   const [isSwitching, setIsSwitching] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const handleSwitchToMezo = async () => {
     setIsSwitching(true)
+    setError(null)
     try {
-      await switchChain({ chainId: 31611 })
-      onClose()
-    } catch (error) {
+      // First, try to switch (if network exists in wallet)
+      try {
+        await switchChain({ chainId: 31611 })
+        onClose()
+      } catch (switchError: any) {
+        // If switch fails, network might not exist - try to add it
+        if (switchError?.code === 4902 || switchError?.message?.includes('not added')) {
+          console.log('Network not found in wallet, adding it...')
+          await addChain({ chain: mezoTestnetChain })
+          // After adding, try switching again
+          await switchChain({ chainId: 31611 })
+          onClose()
+        } else {
+          // Other errors (user rejection, etc.)
+          throw switchError
+        }
+      }
+    } catch (error: any) {
       console.error('Failed to switch to Mezo testnet:', error)
+      if (error?.message?.includes('reject') || error?.code === 4001) {
+        setError('Network switch was cancelled')
+      } else {
+        setError('Failed to switch network. Please add Mezo Testnet manually in your wallet.')
+      }
     } finally {
       setIsSwitching(false)
     }
@@ -72,11 +118,11 @@ export function NetworkSwitchModal({ isOpen, onClose }: NetworkSwitchModalProps)
               ) : (
                 <Button
                   onClick={handleSwitchToMezo}
-                  disabled={isPending || isSwitching}
+                  disabled={isSwitchPending || isAddPending || isSwitching}
                   size="sm"
                   className="bg-orange-600 hover:bg-orange-700"
                 >
-                  {isPending || isSwitching ? 'Switching...' : 'Switch'}
+                  {isSwitchPending || isAddPending || isSwitching ? 'Switching...' : 'Switch'}
                 </Button>
               )}
             </div>
@@ -113,11 +159,16 @@ export function NetworkSwitchModal({ isOpen, onClose }: NetworkSwitchModalProps)
             {chain?.id !== 31611 && (
               <Button
                 onClick={handleSwitchToMezo}
-                disabled={isPending || isSwitching}
+                disabled={isSwitchPending || isAddPending || isSwitching}
                 className="flex-1 bg-orange-600 hover:bg-orange-700"
               >
-                {isPending || isSwitching ? 'Switching...' : 'Switch Now'}
+                {isSwitchPending || isAddPending || isSwitching ? 'Switching...' : 'Switch Now'}
               </Button>
+            )}
+            {error && (
+              <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <p className="text-sm text-red-800">{error}</p>
+              </div>
             )}
           </div>
         </div>
