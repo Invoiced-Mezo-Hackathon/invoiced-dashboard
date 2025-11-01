@@ -393,6 +393,15 @@ export function Dashboard({ onNavigate, invoices, stats }: DashboardProps) {
           <p className="text-sm font-navbar text-white/60">Welcome back! Here's what's happening with your business.</p>
         </div>
 
+        {/* Bitcoin & MUSD Statement */}
+        <div className="mb-6 p-4 sm:p-5 rounded-xl sm:rounded-2xl bg-gradient-to-r from-orange-500/10 via-orange-600/5 to-purple-500/10 border border-orange-400/20 backdrop-blur-xl">
+          <p className="text-base sm:text-lg font-semibold font-navbar text-center text-white/90 leading-relaxed">
+            💎 <span className="text-orange-300">Bitcoin-backed MUSD</span> – Unlock liquidity from your BTC without selling. 
+            <span className="text-purple-300"> Borrow stablecoins</span>, <span className="text-green-300">accept BTC payments</span>, 
+            <span className="text-blue-300"> grow your business</span>.
+          </p>
+        </div>
+
         {/* Stats Overview */}
         <div className="mb-8">
           <h2 className="text-lg font-semibold mb-4 font-navbar text-white/90">Business Overview</h2>

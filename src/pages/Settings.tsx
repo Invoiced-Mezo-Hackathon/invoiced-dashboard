@@ -3,11 +3,12 @@ import { useAccount } from 'wagmi';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { User, Wallet, Download, Bell } from 'lucide-react';
+import { User, Wallet, Download, Bell, Trash2, RefreshCw } from 'lucide-react';
 import { useWalletUtils } from '@/hooks/useWalletUtils';
 import { toast } from 'react-hot-toast';
 import { SettingsSection } from '@/components/settings/SettingsSection';
 import { AutoSaveIndicator } from '@/components/settings/AutoSaveIndicator';
+import { matsRewards } from '@/services/mats-rewards';
 
 interface UserSettings {
   name: string;
@@ -178,6 +179,66 @@ export function Settings() {
       setDefaultTaxRate(0);
       setNotificationsEnabled(false);
       toast.success('Settings cleared');
+    }
+  };
+
+  const handleResetAllLocalData = () => {
+    if (!address) return;
+    
+    const confirmMessage = `⚠️ WARNING: This will delete ALL local data including:
+    
+• All MATS rewards (${matsRewards.getTotalMats(address)} MATS will be lost)
+• All stored transactions
+• All invoice drafts
+• All invoice metadata
+
+This action CANNOT be undone!
+
+Are you absolutely sure you want to reset everything?`;
+
+    if (!window.confirm(confirmMessage)) {
+      return;
+    }
+
+    try {
+      // Clear MATS rewards
+      matsRewards.clearRewards(address);
+      
+      // Clear all related localStorage keys
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && (
+          key.startsWith(`mats_rewards_`) ||
+          key.startsWith(`transactions_`) ||
+          key.startsWith(`invoices_`) ||
+          key.startsWith(`invoice_drafts_`) ||
+          key.startsWith(`invoice_metadata_`)
+        )) {
+          keysToRemove.push(key);
+        }
+      }
+      
+      keysToRemove.forEach(key => localStorage.removeItem(key));
+      
+      // Dispatch custom event to notify all components
+      window.dispatchEvent(new CustomEvent('storage_reset'));
+      
+      toast.success(`✅ Cleared ${keysToRemove.length} local storage entries. MATS reset to 0!`, {
+        duration: 5000,
+      });
+      
+      // Force update all components immediately
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('storage_reset'));
+        // Small delay before reload to show the toast
+        setTimeout(() => {
+          window.location.reload();
+        }, 1000);
+      }, 500);
+    } catch (error) {
+      console.error('Failed to reset local data:', error);
+      toast.error('Failed to reset local data');
     }
   };
 
@@ -389,6 +450,25 @@ export function Settings() {
                 <p className="text-sm font-semibold text-red-300 font-navbar mb-0.5">Clear All Settings</p>
                 <p className="text-xs text-white/60 font-navbar">
                   Reset to defaults - This action cannot be undone
+                </p>
+              </div>
+              <i className="fa-solid fa-chevron-right text-white/30 text-xs"></i>
+            </button>
+
+            <button
+              onClick={handleResetAllLocalData}
+              disabled={!isConnected}
+              className="w-full flex items-center gap-4 p-4 rounded-xl bg-gradient-to-r from-purple-500/10 to-pink-500/5 border border-purple-500/20 hover:border-purple-500/40 hover:from-purple-500/15 hover:to-pink-500/10 transition-all disabled:opacity-50 disabled:cursor-not-allowed group"
+            >
+              <div className="w-10 h-10 rounded-lg bg-purple-500/20 border border-purple-400/30 flex items-center justify-center group-hover:bg-purple-500/30 transition-colors">
+                <RefreshCw className="w-5 h-5 text-purple-400" />
+              </div>
+              <div className="text-left flex-1">
+                <p className="text-sm font-semibold text-purple-300 font-navbar mb-0.5">
+                  Reset All Local Data
+                </p>
+                <p className="text-xs text-white/60 font-navbar">
+                  Clear MATS, transactions, invoices - Start fresh
                 </p>
               </div>
               <i className="fa-solid fa-chevron-right text-white/30 text-xs"></i>

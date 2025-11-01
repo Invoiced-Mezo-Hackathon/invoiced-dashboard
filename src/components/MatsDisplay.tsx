@@ -34,9 +34,29 @@ export function MatsDisplay({ compact = false, showBreakdown = false }: MatsDisp
 
     updateMats();
     
+    // Listen for storage changes (when MATS are reset)
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key?.startsWith('mats_rewards_')) {
+        updateMats();
+      }
+    };
+    
+    // Listen for custom reset event
+    const handleReset = () => {
+      updateMats();
+    };
+    
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('storage_reset', handleReset);
+    
     // Refresh every 2 seconds to catch new rewards
     const interval = setInterval(updateMats, 2000);
-    return () => clearInterval(interval);
+    
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('storage_reset', handleReset);
+    };
   }, [address]);
 
   if (!address) return null;

@@ -107,9 +107,22 @@ async function main() {
     },
   };
 
+  // Add deployment version hash
+  const crypto = require("crypto");
+  const versionHash = crypto
+    .createHash("sha256")
+    .update(`${invoiceAddress}-${vaultAddress}-${MUSD_TOKEN}`)
+    .digest("hex")
+    .substring(0, 16);
+  
+  contractAddresses.deploymentVersion = versionHash;
+  contractAddresses.versionTimestamp = new Date().toISOString();
+
   const deploymentInfoPath = path.join(__dirname, "..", "deployment-info.json");
   fs.writeFileSync(deploymentInfoPath, JSON.stringify(contractAddresses, null, 2));
   console.log("\n✅ Saved deployment info to:", deploymentInfoPath);
+  console.log("🔐 Deployment version:", versionHash);
+  console.log("⚠️  MATS will automatically reset on next app load");
 
   // ===== Update mezo.ts with new addresses =====
   console.log("\n📋 Updating src/lib/mezo.ts...");

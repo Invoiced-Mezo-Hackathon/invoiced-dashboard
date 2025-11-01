@@ -14,6 +14,7 @@ import { Analytics } from '@/pages/Analytics';
 import { useWalletUtils } from '@/hooks/useWalletUtils';
 import { useNetworkNotifications } from '@/hooks/useNetworkNotifications';
 import { useInvoiceContract } from '@/hooks/useInvoiceContract';
+import { useContractVersionCheck } from '@/hooks/useContractVersionCheck';
 import { invoiceStorage } from '@/services/invoice-storage';
 import { Invoice } from '@/types/invoice';
 
@@ -72,6 +73,9 @@ function App() {
   
   // Enable network notifications
   useNetworkNotifications();
+
+  // Check if contracts have been redeployed and reset MATS if needed
+  useContractVersionCheck();
 
   // Show network modal when user connects to a non-Mezo network
   useEffect(() => {
