@@ -216,147 +216,128 @@ export function Settings() {
         <AutoSaveIndicator status={saveStatus} />
       </div>
 
-      <div className="max-w-3xl mx-auto space-y-4">
-        {/* Wallet Info - Now First */}
-        <SettingsSection
-          title="Wallet"
-          description="Your connected wallet information"
-          icon={Wallet}
-          iconBgColor="bg-green-500/10"
-          iconColor="text-green-400"
-        >
-          <div className="space-y-4">
-            <div className="flex items-center justify-between p-4 rounded-xl bg-[#2C2C2E]/20 border border-green-400/10">
+      <div className="max-w-4xl mx-auto">
+        {/* Grid Layout for Better Organization */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+          {/* Wallet Info - Compact Card */}
+          <SettingsSection
+            title="Wallet Connection"
+            description="Your connected wallet"
+            icon={Wallet}
+            iconBgColor="bg-green-500/10"
+            iconColor="text-green-400"
+            defaultOpen={true}
+          >
+            <div className="space-y-3">
+              <div className="flex items-center justify-between p-4 rounded-xl bg-gradient-to-br from-green-500/10 to-green-600/5 border border-green-400/20">
+                <div className="flex-1">
+                  <p className="text-xs text-white/50 mb-1.5 font-navbar uppercase tracking-wide">Wallet Address</p>
+                  <p className="font-mono text-sm text-white break-all">{formatAddress(address!)}</p>
+                </div>
+                <div className="ml-4 flex flex-col items-end gap-1">
+                  <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-green-500/20 border border-green-400/30">
+                    <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>
+                    <span className="text-xs text-green-300 font-navbar font-medium">Connected</span>
+                  </div>
+                </div>
+              </div>
+              <div className="p-4 rounded-xl bg-[#2C2C2E]/30 border border-green-400/10">
+                <p className="text-xs text-white/50 mb-1.5 font-navbar uppercase tracking-wide">Network</p>
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-blue-400"></div>
+                  <p className="text-sm font-medium text-white font-navbar">{getNetworkName(chainId)}</p>
+                </div>
+              </div>
+            </div>
+          </SettingsSection>
+
+          {/* Profile Section */}
+          <SettingsSection
+            title="Profile"
+            description="Your identity and branding"
+            icon={User}
+            iconBgColor="bg-blue-500/10"
+            iconColor="text-blue-400"
+            defaultOpen={true}
+          >
+            <div className="space-y-4">
+              {/* Avatar Preview */}
+              <div className="flex items-center gap-4 p-4 rounded-xl bg-gradient-to-br from-blue-500/10 to-purple-500/5 border border-blue-400/20">
+                <div className="w-14 h-14 rounded-full bg-gradient-to-br from-blue-500/20 to-purple-500/20 border-2 border-blue-400/30 flex items-center justify-center text-white text-lg font-bold shadow-lg">
+                  {getInitials(name || businessName)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-white font-navbar truncate">{name || 'User'}</p>
+                  <p className="text-xs text-white/60 font-navbar truncate">{businessName || 'No business name'}</p>
+                </div>
+              </div>
+
               <div>
-                <p className="text-sm text-white/60 mb-1 font-navbar">Connected Wallet</p>
-                <p className="font-mono text-sm text-white">{formatAddress(address!)}</p>
+                <Label htmlFor="name" className="text-xs text-white/60 mb-2 block font-navbar uppercase tracking-wide">
+                  Display Name
+                </Label>
+                <Input
+                  id="name"
+                  value={name}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)}
+                  className="bg-[#2C2C2E]/50 backdrop-blur-xl border border-green-400/20 focus:border-green-400/50 text-white placeholder:text-white/40 h-10"
+                  placeholder="Enter your display name"
+                  disabled={!isConnected}
+                />
               </div>
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-green-400"></div>
-                <span className="text-xs text-green-400 font-navbar">Connected</span>
-              </div>
-            </div>
-            <div className="flex items-center justify-between p-4 rounded-xl bg-[#2C2C2E]/20 border border-green-400/10">
+
               <div>
-                <p className="text-sm text-white/60 mb-1 font-navbar">Network</p>
-                <p className="text-sm font-medium text-white font-navbar">{getNetworkName(chainId)}</p>
+                <Label htmlFor="businessName" className="text-xs text-white/60 mb-2 block font-navbar uppercase tracking-wide">
+                  Business Name <span className="text-white/40">(Optional)</span>
+                </Label>
+                <Input
+                  id="businessName"
+                  value={businessName}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setBusinessName(e.target.value)}
+                  className="bg-[#2C2C2E]/50 backdrop-blur-xl border border-green-400/20 focus:border-green-400/50 text-white placeholder:text-white/40 h-10"
+                  placeholder="Enter business name"
+                  disabled={!isConnected}
+                />
               </div>
             </div>
-          </div>
-        </SettingsSection>
-
-        {/* Profile Section */}
-        <SettingsSection
-          title="Profile"
-          description="Customize your identity"
-          icon={User}
-          iconBgColor="bg-blue-500/10"
-          iconColor="text-blue-400"
-        >
-          <div className="space-y-4">
-            {/* Avatar Preview */}
-            <div className="flex items-center gap-4 pb-4 border-b border-green-400/10">
-              <div className="w-16 h-16 rounded-full bg-green-500/10 border border-green-400/30 flex items-center justify-center text-white text-xl font-bold shadow-lg">
-                {getInitials(name || businessName)}
-              </div>
-              <div>
-                <p className="text-sm font-medium text-white font-navbar">{name || 'User'}</p>
-                <p className="text-xs text-white/60 font-navbar">{businessName || 'No business name set'}</p>
-              </div>
-            </div>
-
-            <div>
-              <Label htmlFor="name" className="text-sm text-white/70 mb-2 block font-navbar">
-                Display Name
-              </Label>
-              <Input
-                id="name"
-                value={name}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)}
-                className="bg-[#2C2C2E]/40 backdrop-blur-xl border border-green-400/20 focus:border-green-400/40 text-white placeholder:text-white/40"
-                placeholder="Enter your display name"
-                disabled={!isConnected}
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="businessName" className="text-sm text-white/70 mb-2 block font-navbar">
-                Business/Company Name (Optional)
-              </Label>
-              <Input
-                id="businessName"
-                value={businessName}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setBusinessName(e.target.value)}
-                className="bg-[#2C2C2E]/40 backdrop-blur-xl border border-green-400/20 focus:border-green-400/40 text-white placeholder:text-white/40"
-                placeholder="Enter business name"
-                disabled={!isConnected}
-              />
-            </div>
-          </div>
-        </SettingsSection>
-
-        {/* Wallet Info */}
-        <SettingsSection
-          title="Wallet"
-          description="Your connected wallet information"
-          icon={Wallet}
-          iconBgColor="bg-green-500/10"
-          iconColor="text-green-400"
-        >
-          <div className="space-y-4">
-            <div className="flex items-center justify-between p-4 rounded-xl bg-[#2C2C2E]/20 border border-green-400/10">
-            <div>
-                <p className="text-sm text-white/60 mb-1 font-navbar">Connected Wallet</p>
-                <p className="font-mono text-sm text-white">{formatAddress(address!)}</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-green-400"></div>
-                <span className="text-xs text-green-400 font-navbar">Connected</span>
-              </div>
-            </div>
-            <div className="flex items-center justify-between p-4 rounded-xl bg-[#2C2C2E]/20 border border-green-400/10">
-            <div>
-                <p className="text-sm text-white/60 mb-1 font-navbar">Network</p>
-                <p className="text-sm font-medium text-white font-navbar">{getNetworkName(chainId)}</p>
-              </div>
-            </div>
-          </div>
-        </SettingsSection>
+          </SettingsSection>
+        </div>
 
         {/* Preferences */}
         <SettingsSection
           title="Preferences"
-          description="Configure your app preferences"
+          description="App settings and notifications"
           icon={Bell}
-          iconBgColor="bg-green-500/10"
-          iconColor="text-green-400"
+          iconBgColor="bg-purple-500/10"
+          iconColor="text-purple-400"
+          defaultOpen={false}
         >
           <div className="space-y-4">
             <div>
-              <Label htmlFor="currency" className="text-sm text-white/70 mb-2 block font-navbar">
+              <Label htmlFor="currency" className="text-xs text-white/60 mb-2 block font-navbar uppercase tracking-wide">
                 Default Currency
               </Label>
               <select
                 id="currency"
                 value={currency}
                 onChange={(e) => setCurrency(e.target.value)}
-                className="w-full p-3 rounded-lg bg-[#2C2C2E]/40 backdrop-blur-xl border border-green-400/20 focus:border-green-400/40 text-white"
+                className="w-full p-3 rounded-xl bg-[#2C2C2E]/50 backdrop-blur-xl border border-green-400/20 focus:border-green-400/50 text-white h-10 text-sm"
                 disabled={!isConnected}
               >
-                <option value="USD">USD</option>
-                <option value="MUSD">MUSD</option>
-                <option value="BTC">BTC</option>
-                <option value="ETH">ETH</option>
+                <option value="USD">USD - US Dollar</option>
+                <option value="MUSD">MUSD - Mezo USD</option>
+                <option value="BTC">BTC - Bitcoin</option>
+                <option value="ETH">ETH - Ethereum</option>
               </select>
             </div>
 
-            <div className="flex items-center justify-between p-4 rounded-xl bg-[#2C2C2E]/20 border border-green-400/10">
-              <div className="flex-1">
-                <Label htmlFor="notifications" className="text-sm font-medium text-white font-navbar">
+            <div className="flex items-center justify-between p-4 rounded-xl bg-gradient-to-r from-purple-500/10 to-purple-600/5 border border-purple-400/20">
+              <div className="flex-1 mr-4">
+                <Label htmlFor="notifications" className="text-sm font-semibold text-white font-navbar block mb-1">
                   Browser Notifications
                 </Label>
-                <p className="text-xs text-white/60 mt-1 font-navbar">
-                  Get notified about payments and invoice updates
+                <p className="text-xs text-white/60 font-navbar">
+                  Receive alerts for payments and invoice updates
                 </p>
               </div>
               <Switch
@@ -371,8 +352,8 @@ export function Settings() {
 
         {/* Data Management */}
         <SettingsSection
-          title="Data Management"
-          description="Export or manage your data"
+          title="Data & Backup"
+          description="Export, backup, and manage your data"
           icon={Download}
           iconBgColor="bg-orange-500/10"
           iconColor="text-orange-400"
@@ -382,40 +363,51 @@ export function Settings() {
             <button
               onClick={handleExport}
               disabled={!isConnected}
-              className="w-full flex items-center gap-3 p-4 rounded-xl bg-[#2C2C2E]/20 border border-green-400/10 hover:border-green-400/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full flex items-center gap-4 p-4 rounded-xl bg-gradient-to-r from-green-500/10 to-emerald-500/5 border border-green-400/20 hover:border-green-400/40 hover:from-green-500/15 hover:to-emerald-500/10 transition-all disabled:opacity-50 disabled:cursor-not-allowed group"
             >
-              <i className="fa-solid fa-download text-green-400"></i>
+              <div className="w-10 h-10 rounded-lg bg-green-500/20 border border-green-400/30 flex items-center justify-center group-hover:bg-green-500/30 transition-colors">
+                <i className="fa-solid fa-download text-green-400 text-sm"></i>
+              </div>
               <div className="text-left flex-1">
-                <p className="text-sm font-medium text-white font-navbar">Export All Data</p>
+                <p className="text-sm font-semibold text-white font-navbar mb-0.5">Export All Data</p>
                 <p className="text-xs text-white/60 font-navbar">
-                  Download your settings and invoices as JSON
+                  Download settings and invoices as JSON backup
                 </p>
               </div>
+              <i className="fa-solid fa-chevron-right text-white/30 text-xs"></i>
             </button>
 
             <button
               onClick={handleClearData}
               disabled={!isConnected}
-              className="w-full flex items-center gap-3 p-4 rounded-xl bg-[#2C2C2E]/20 border border-red-500/20 hover:border-red-500/40 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full flex items-center gap-4 p-4 rounded-xl bg-gradient-to-r from-red-500/10 to-orange-500/5 border border-red-500/20 hover:border-red-500/40 hover:from-red-500/15 hover:to-orange-500/10 transition-all disabled:opacity-50 disabled:cursor-not-allowed group"
             >
-              <i className="fa-solid fa-trash text-red-400"></i>
+              <div className="w-10 h-10 rounded-lg bg-red-500/20 border border-red-400/30 flex items-center justify-center group-hover:bg-red-500/30 transition-colors">
+                <i className="fa-solid fa-trash text-red-400 text-sm"></i>
+              </div>
               <div className="text-left flex-1">
-                <p className="text-sm font-medium text-red-400 font-navbar">Clear All Settings</p>
+                <p className="text-sm font-semibold text-red-300 font-navbar mb-0.5">Clear All Settings</p>
                 <p className="text-xs text-white/60 font-navbar">
-                  Reset all settings to default (cannot be undone)
+                  Reset to defaults - This action cannot be undone
                 </p>
               </div>
+              <i className="fa-solid fa-chevron-right text-white/30 text-xs"></i>
             </button>
           </div>
         </SettingsSection>
 
         {/* Security Notice */}
-        <div className="p-4 rounded-xl border border-green-400/20 bg-green-500/5">
+        <div className="mt-4 p-4 rounded-xl border border-yellow-500/20 bg-gradient-to-r from-yellow-500/10 to-orange-500/5">
           <div className="flex items-start gap-3">
-            <i className="fa-solid fa-triangle-exclamation text-green-400 flex-shrink-0 mt-0.5"></i>
-            <p className="text-xs text-white/70 leading-relaxed font-navbar">
-              Keep your private keys safe and never share your seed phrase. Your wallet security is your responsibility.
-            </p>
+            <div className="w-8 h-8 rounded-lg bg-yellow-500/20 border border-yellow-400/30 flex items-center justify-center flex-shrink-0 mt-0.5">
+              <i className="fa-solid fa-shield-halved text-yellow-400 text-sm"></i>
+            </div>
+            <div className="flex-1">
+              <p className="text-xs font-semibold text-yellow-300 font-navbar mb-1">Security Reminder</p>
+              <p className="text-xs text-white/70 leading-relaxed font-navbar">
+                Keep your private keys safe and never share your seed phrase. Your wallet security is your responsibility.
+              </p>
+            </div>
           </div>
         </div>
       </div>

@@ -1,18 +1,22 @@
 import { useState, useEffect, useMemo } from 'react';
 import { ArrowDownLeft, BarChart3, ExternalLink } from 'lucide-react';
-import { transactionStorage } from '@/services/transaction-storage';
+import { transactionStorage, StoredTransaction } from '@/services/transaction-storage';
 import { MEZO_EXPLORER_URL } from '@/lib/boar-config';
 import type { Invoice } from '@/types/invoice';
-import { useWatchContractEvent } from 'wagmi';
+import { useWatchContractEvent, usePublicClient, useAccount } from 'wagmi';
 import { INVOICE_CONTRACT_ABI, MEZO_CONTRACTS } from '@/lib/mezo';
+import { TransactionDetailsModal } from '@/components/TransactionDetailsModal';
 
 interface PaymentsProps {
   invoices: Invoice[];
 }
 
 export function Payments({ invoices }: PaymentsProps) {
+  const { address } = useAccount();
   const [bitcoinPrice, setBitcoinPrice] = useState<number>(0);
   const [version, setVersion] = useState(0); // trigger refresh when new events arrive
+  const [selectedTransaction, setSelectedTransaction] = useState<StoredTransaction | null>(null);
+  const [showTransactionModal, setShowTransactionModal] = useState(false);
   // notifiedTxsRef no longer needed
 
   // Fetch real-time Bitcoin price
@@ -86,10 +90,16 @@ export function Payments({ invoices }: PaymentsProps) {
           actualAmount
         });
         
+        // Only store transactions if wallet is connected
+        if (!address) {
+          console.warn('⚠️ Cannot store transaction - wallet not connected');
+          continue;
+        }
+        
         // Check if transaction already exists to avoid duplicates
-        const existingTx = transactionStorage.getTransactionByHash(txHash);
+        const existingTx = transactionStorage.getTransactionByHash(address, txHash);
         if (!existingTx) {
-          transactionStorage.addTransaction({
+          transactionStorage.addTransaction(address, {
             txHash,
             invoiceId,
             from: '',
@@ -103,9 +113,9 @@ export function Payments({ invoices }: PaymentsProps) {
           
           // Also store the Boar payment transaction hash if different from confirm tx
           if (paymentTxHash && paymentTxHash !== '' && paymentTxHash !== txHash) {
-            const boarTx = transactionStorage.getTransactionByHash(paymentTxHash);
+            const boarTx = transactionStorage.getTransactionByHash(address, paymentTxHash);
             if (!boarTx) {
-              transactionStorage.addTransaction({
+              transactionStorage.addTransaction(address, {
                 txHash: paymentTxHash,
                 invoiceId,
                 from: '',
@@ -121,9 +131,9 @@ export function Payments({ invoices }: PaymentsProps) {
         } else {
           console.log('ℹ️ Transaction already stored, updating details...');
           // Update existing transaction with latest info
-          if (observedAmount && observedAmount !== '0' && observedAmount !== '') {
+          if (observedAmount && observedAmount !== '0' && observedAmount !== '' && address) {
             existingTx.amount = observedAmount;
-            transactionStorage.updateTransactionStatus(txHash, 'confirmed');
+            transactionStorage.updateTransactionStatus(address, txHash, 'confirmed');
           }
         }
       }
@@ -143,10 +153,11 @@ export function Payments({ invoices }: PaymentsProps) {
 
   // Calculate payment history from invoices with transaction details (memoized)
   const paymentHistory = useMemo(() => {
+    if (!address) return [];
     return invoices
       .filter(invoice => invoice.status === 'paid')
       .map(invoice => {
-        const transactions = transactionStorage.getTransactionsForInvoice(invoice.id);
+        const transactions = transactionStorage.getTransactionsForInvoice(address, invoice.id);
         const latestTransaction = transactions[0];
         
         // Prefer observedInboundAmount (wei) recorded on chain; fallback to tx amount (wei). Convert to BTC.
@@ -249,8 +260,21 @@ export function Payments({ invoices }: PaymentsProps) {
 
         {paymentHistory.length > 0 ? (
           <div className="space-y-3">
-            {paymentHistory.map((payment) => (
-              <div key={payment.id} className="flex items-center justify-between p-4 rounded-xl bg-[#2C2C2E]/20 border border-green-400/10 hover:border-green-400/20 transition-all">
+            {paymentHistory.map((payment) => {
+              const transaction = paymentHistory.find(p => p.id === payment.id);
+              const storedTx = transactionStorage.getTransactionByHash(payment.txHash || '');
+              
+              return (
+              <div 
+                key={payment.id} 
+                className="flex items-center justify-between p-4 rounded-xl bg-[#2C2C2E]/20 border border-green-400/10 hover:border-green-400/20 transition-all cursor-pointer"
+                onClick={() => {
+                  if (storedTx) {
+                    setSelectedTransaction(storedTx);
+                    setShowTransactionModal(true);
+                  }
+                }}
+              >
                 <div className="flex items-center gap-4">
                   <div className="w-8 h-8 rounded-lg border border-green-400/30 flex items-center justify-center">
                     <i className="fa-solid fa-circle-down text-green-400 text-sm"></i>
@@ -291,7 +315,8 @@ export function Payments({ invoices }: PaymentsProps) {
                   </div>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center py-12 text-center">
@@ -303,6 +328,16 @@ export function Payments({ invoices }: PaymentsProps) {
           </div>
         )}
       </div>
+
+      {/* Transaction Details Modal */}
+      <TransactionDetailsModal
+        isOpen={showTransactionModal}
+        onClose={() => {
+          setShowTransactionModal(false);
+          setSelectedTransaction(null);
+        }}
+        transaction={selectedTransaction}
+      />
     </div>
   );
 }

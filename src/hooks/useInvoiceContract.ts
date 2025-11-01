@@ -16,6 +16,7 @@ import { boarRPC } from '@/services/boar-rpc';
 import { paymentMonitor, PaymentEvent } from '@/services/payment-monitor';
 import { transactionStorage } from '@/services/transaction-storage';
 import { invoiceStorage, DraftInvoice } from '@/services/invoice-storage';
+import { invoiceMetadataStorage } from '@/services/invoice-metadata';
 
 export function useInvoiceContract(): UseInvoiceContractReturn {
   const { address, isConnected } = useAccount();
@@ -37,6 +38,9 @@ export function useInvoiceContract(): UseInvoiceContractReturn {
   const [createTx, setCreateTx] = useState<TransactionState>({ status: 'idle' });
   const [confirmTx, setConfirmTx] = useState<TransactionState>({ status: 'idle' });
   const [cancelTx, setCancelTx] = useState<TransactionState>({ status: 'idle' });
+  
+  // Track invoice ID being confirmed (for immediate UI update)
+  const confirmingInvoiceIdRef = useRef<string | null>(null);
   
   // Contract reads - using v2 API
   const { refetch: refetchUserInvoices } = useReadContract({
@@ -82,15 +86,15 @@ export function useInvoiceContract(): UseInvoiceContractReturn {
   const { writeContractAsync: approveInvoiceWrite } = useWriteContract();
   
   // Wait for transaction receipts
-  const { isLoading: isWaitingCreate } = useWaitForTransactionReceipt({
+  const { isLoading: isWaitingCreate, isSuccess: isCreateSuccess } = useWaitForTransactionReceipt({
     hash: createTx.status === 'success' && 'hash' in createTx ? (createTx.hash as `0x${string}`) : undefined,
   });
   
-  const { isLoading: isWaitingConfirm } = useWaitForTransactionReceipt({
+  const { isLoading: isWaitingConfirm, isSuccess: isConfirmSuccess } = useWaitForTransactionReceipt({
     hash: confirmTx.status === 'success' && 'hash' in confirmTx ? (confirmTx.hash as `0x${string}`) : undefined,
   });
   
-  const { isLoading: isWaitingCancel } = useWaitForTransactionReceipt({
+  const { isLoading: isWaitingCancel, isSuccess: isCancelSuccess } = useWaitForTransactionReceipt({
     hash: cancelTx.status === 'success' && 'hash' in cancelTx ? (cancelTx.hash as `0x${string}`) : undefined,
   });
   
@@ -112,14 +116,18 @@ export function useInvoiceContract(): UseInvoiceContractReturn {
     // Display the originally requested amount; keep observedInboundAmount separately for transaction details
     const displayAmount = btcAmount;
     
+    // Load metadata (Bitcoin price at creation and original USD amount)
+    const invoiceId = blockchainInvoice.id.toString();
+    const bitcoinPriceAtCreation = address ? invoiceMetadataStorage.getBitcoinPriceAtCreation(address, invoiceId) : null;
+    
     return {
-      id: blockchainInvoice.id.toString(),
+      id: invoiceId,
       clientName: blockchainInvoice.clientName,
       clientCode: blockchainInvoice.clientCode,
       details: blockchainInvoice.description,
       amount: displayAmount, // Show requested amount; actual received is tracked in observedInboundAmount
       currency: (blockchainInvoice.currency || 'USD') as 'USD' | 'KES', // Use stored currency
-      musdAmount: displayAmount * 0.98, // Mock conversion
+      musdAmount: displayAmount * 0.98, // Mock conversion (kept for backward compatibility)
       status,
       createdAt: new Date(blockchainInvoice.createdAt * 1000).toISOString(),
       wallet: blockchainInvoice.bitcoinAddress,
@@ -134,16 +142,18 @@ export function useInvoiceContract(): UseInvoiceContractReturn {
       paymentTxHash: blockchainInvoice.paymentTxHash || undefined,
       observedInboundAmount: blockchainInvoice.observedInboundAmount || undefined,
       balanceAtCreation: blockchainInvoice.balanceAtCreation || undefined,
+      bitcoinPriceAtCreation: bitcoinPriceAtCreation || undefined,
     };
-  }, []);
+  }, [address]);
 
-  // Read all invoices from blockchain
+  // Read user invoices from blockchain (scoped by wallet address)
   const { data: allBlockchainInvoices, refetch: refetchAllInvoices } = useReadContract({
     address: MEZO_CONTRACTS.INVOICE_CONTRACT as `0x${string}`,
     abi: INVOICE_CONTRACT_ABI,
-    functionName: 'getAllInvoices',
+    functionName: 'getUserInvoices',
+    args: address ? [address] : undefined,
     query: {
-      enabled: true, // Fetch all invoices regardless of wallet connection
+      enabled: !!address && isConnected, // Only fetch when wallet is connected
     },
   });
 
@@ -176,28 +186,47 @@ export function useInvoiceContract(): UseInvoiceContractReturn {
     abi: INVOICE_CONTRACT_ABI,
     eventName: 'InvoicePaid',
     onLogs: (logs) => {
-      refetchAllInvoices();
-      if (address && isConnected) refetchUserInvoices();
-      try {
-        for (const log of (logs as any[])) {
-          const id = ((log as any).args?.id as bigint | undefined)?.toString() || 'unknown';
-          if (!notifiedPaidRef.current.has(id)) {
-            toast.success('Payment confirmed on-chain');
-            // Do not push a bell notification here; the bell is emitted on user confirmPayment success
-            notifiedPaidRef.current.add(id);
+      if (address && isConnected) {
+        // Only process events for invoices created by the current wallet
+        try {
+          for (const log of (logs as any[])) {
+            // Note: InvoicePaid event doesn't have creator, so we need to check against our invoices
+            // For now, refetch and let the UI update naturally
+            refetchAllInvoices();
+            refetchUserInvoices();
+            const id = ((log as any).args?.id as bigint | undefined)?.toString() || 'unknown';
+            // Check if this invoice belongs to the current wallet by refetching
+            if (!notifiedPaidRef.current.has(id)) {
+              toast.success('Payment confirmed on-chain');
+              // Do not push a bell notification here; the bell is emitted on user confirmPayment success
+              notifiedPaidRef.current.add(id);
+            }
           }
-        }
-      } catch {}
+        } catch {}
+      }
     }
   });
   useWatchContractEvent({
     address: MEZO_CONTRACTS.INVOICE_CONTRACT as `0x${string}`,
     abi: INVOICE_CONTRACT_ABI,
     eventName: 'InvoiceCancelled',
-    onLogs: () => {
-      refetchAllInvoices();
-      if (address && isConnected) refetchUserInvoices();
-      toast('Invoice cancelled', { icon: '🛑' });
+    onLogs: (logs) => {
+      if (address && isConnected) {
+        // Only process events for invoices created by the current wallet
+        try {
+          for (const log of (logs as any[])) {
+            const creator = (log as any).args?.creator as string | undefined;
+            // Only process if this invoice was created by the current wallet
+            if (creator && creator.toLowerCase() === address.toLowerCase()) {
+              refetchAllInvoices();
+              refetchUserInvoices();
+              toast('Invoice cancelled', { icon: '🛑' });
+              const id = ((log as any).args?.id as bigint | undefined)?.toString() || 'unknown';
+              window.dispatchEvent(new CustomEvent('notify', { detail: { title: 'Invoice cancelled', message: `Invoice #${id} has been cancelled` } }));
+            }
+          }
+        } catch {}
+      }
     }
   });
   useWatchContractEvent({
@@ -205,9 +234,11 @@ export function useInvoiceContract(): UseInvoiceContractReturn {
     abi: INVOICE_CONTRACT_ABI,
     eventName: 'InvoiceApproved',
     onLogs: () => {
-      refetchAllInvoices();
-      if (address && isConnected) refetchUserInvoices();
-      toast.success('Invoice approved');
+      if (address && isConnected) {
+        refetchAllInvoices();
+        refetchUserInvoices();
+        toast.success('Invoice approved');
+      }
     }
   });
   
@@ -215,7 +246,13 @@ export function useInvoiceContract(): UseInvoiceContractReturn {
   
   // Load drafts from localStorage on mount and when blockchain data changes
   useEffect(() => {
-    const drafts = invoiceStorage.listDrafts();
+    if (!address || !isConnected) {
+      // Clear invoices when disconnected
+      setInvoices([]);
+      return;
+    }
+
+    const drafts = invoiceStorage.listDrafts(address);
     console.log('💾 Loaded drafts from localStorage:', drafts.length);
 
     // If blockchain data is temporarily unavailable (during refetch), don't clobber existing UI
@@ -266,11 +303,13 @@ export function useInvoiceContract(): UseInvoiceContractReturn {
 
         // Remove any local drafts that match blockchain invoices (avoid duplicates)
         try {
-          const draftList = invoiceStorage.listDrafts();
-          const chainClientCodes = new Set(convertedInvoices.map(ci => ci.clientCode).filter(Boolean));
-          draftList
-            .filter(d => d.clientCode && chainClientCodes.has(d.clientCode))
-            .forEach(d => invoiceStorage.removeDraft(d.id));
+          if (address) {
+            const draftList = invoiceStorage.listDrafts(address);
+            const chainClientCodes = new Set(convertedInvoices.map(ci => ci.clientCode).filter(Boolean));
+            draftList
+              .filter(d => d.clientCode && chainClientCodes.has(d.clientCode))
+              .forEach(d => invoiceStorage.removeDraft(address, d.id));
+          }
         } catch (e) {
           console.warn('Failed to prune duplicate drafts:', e);
         }
@@ -288,7 +327,21 @@ export function useInvoiceContract(): UseInvoiceContractReturn {
           convertedInvoices.forEach(blockchainInvoice => {
             const existingIndex = updatedInvoices.findIndex(inv => inv.clientCode === blockchainInvoice.clientCode);
             if (existingIndex >= 0) {
-              // Replace temporary invoice with real blockchain data
+              // Transfer metadata from temporary ID to blockchain ID if needed
+              const tempInvoice = updatedInvoices[existingIndex];
+              if (address && tempInvoice.id !== blockchainInvoice.id && tempInvoice.bitcoinPriceAtCreation) {
+                // Move metadata from temporary ID to blockchain ID
+                const originalUsdAmount = invoiceMetadataStorage.getOriginalUsdAmount(address, tempInvoice.id);
+                invoiceMetadataStorage.setBitcoinPriceAtCreation(
+                  address,
+                  blockchainInvoice.id,
+                  tempInvoice.bitcoinPriceAtCreation,
+                  originalUsdAmount || undefined
+                );
+                // Optionally clear old metadata
+                invoiceMetadataStorage.clearMetadata(address, tempInvoice.id);
+              }
+              // Replace temporary invoice with real blockchain data (includes metadata now)
               updatedInvoices[existingIndex] = blockchainInvoice;
               console.log('🔄 Replaced temporary invoice with blockchain data:', blockchainInvoice.clientCode);
             } else {
@@ -347,6 +400,19 @@ export function useInvoiceContract(): UseInvoiceContractReturn {
       const totalCount = invoiceCountData ? Number(invoiceCountData as unknown as bigint) : 0;
       const paidCount = invoices.filter(inv => inv.status === 'paid').length;
       
+      // Only count truly pending invoices (exclude cancelled and expired)
+      // Derive expired status similar to how it's done in the UI
+      const now = Date.now();
+      const pendingCount = invoices.filter(inv => {
+        if (inv.status !== 'pending') return false;
+        // Check if invoice has expired
+        if (inv.expiresAt) {
+          const isExpired = new Date(inv.expiresAt).getTime() <= now;
+          if (isExpired) return false; // Don't count expired as pending
+        }
+        return true; // Only count if status is pending and not expired
+      }).length;
+      
       // Fallback to local sums if on-chain stats are unavailable
       const localTotalRevenue = invoices
         .filter(inv => inv.status === 'paid')
@@ -358,15 +424,24 @@ export function useInvoiceContract(): UseInvoiceContractReturn {
           return sum + inv.amount;
         }, 0);
 
+      // Only calculate pending amount for invoices that are actually pending (not cancelled or expired)
       const localPending = invoices
-        .filter(inv => inv.status === 'pending')
+        .filter(inv => {
+          if (inv.status !== 'pending') return false;
+          // Check if invoice has expired
+          if (inv.expiresAt) {
+            const isExpired = new Date(inv.expiresAt).getTime() <= now;
+            if (isExpired) return false; // Don't count expired as pending
+          }
+          return true; // Only count if status is pending and not expired
+        })
         .reduce((sum, inv) => sum + inv.amount, 0);
 
       setStats({
         totalRevenue: (totalRevenue as unknown as bigint) ? parseFloat(formatEther(totalRevenue as unknown as bigint)) : localTotalRevenue,
         pendingAmount: (pendingAmount as unknown as bigint) ? parseFloat(formatEther(pendingAmount as unknown as bigint)) : localPending,
         totalInvoices: totalCount,
-        activeInvoices: totalCount - paidCount,
+        activeInvoices: pendingCount, // Only count pending invoices, exclude cancelled and expired
         paidInvoices: paidCount,
       });
       
@@ -397,17 +472,22 @@ export function useInvoiceContract(): UseInvoiceContractReturn {
       const now = new Date();
       const expiresAt = new Date(now.getTime() + 60 * 60 * 1000); // 1 hour from now
       
-      // Snapshot balance at creation from Mezo RPC (wei)
+      // Snapshot balance at creation from Mezo RPC (wei) - start in background, don't block
       const payAddr = (data.payToAddress || data.bitcoinAddress || '').trim();
-      let balanceSnapshotWei = '0';
-      try {
-        if (/^0x[a-fA-F0-9]{40}$/.test(payAddr)) {
-          const bal = await boarRPC.getAddressBalance(payAddr);
-          balanceSnapshotWei = String(bal.balance);
+      let balanceSnapshotWei = '0'; // Default value, will be updated if snapshot succeeds
+      
+      // Start balance snapshot in background (non-blocking)
+      const balanceSnapshotPromise = (async () => {
+        try {
+          if (/^0x[a-fA-F0-9]{40}$/.test(payAddr)) {
+            const bal = await boarRPC.getAddressBalance(payAddr);
+            balanceSnapshotWei = String(bal.balance);
+            console.log('✅ Balance snapshot completed in background:', balanceSnapshotWei);
+          }
+        } catch (e) {
+          console.warn('Failed to snapshot balance at creation; defaulting to 0', e);
         }
-      } catch (e) {
-        console.warn('Failed to snapshot balance at creation; defaulting to 0', e);
-      }
+      })();
 
       const draft: DraftInvoice = {
         id: draftId,
@@ -426,7 +506,7 @@ export function useInvoiceContract(): UseInvoiceContractReturn {
         creator: address,
         recipient: address,
         requestedAmount: parseEther(data.amount).toString(),
-        balanceAtCreation: balanceSnapshotWei, // Use measured balance snapshot (wei)
+        balanceAtCreation: balanceSnapshotWei, // Will use '0' initially, updated if snapshot completes
         syncPending: true, // Will try to sync to blockchain
       };
       
@@ -440,18 +520,34 @@ export function useInvoiceContract(): UseInvoiceContractReturn {
       });
       
       // Save to localStorage as backup only (not shown in UI)
-      invoiceStorage.saveDraft(draft);
+      if (address) {
+        invoiceStorage.saveDraft(address, draft);
+      }
       
       // Don't add to UI until blockchain transaction is confirmed
       // This ensures only blockchain invoices appear in the UI
       
-      // Try to submit to blockchain (if wallet is connected)
+      // Try to submit to blockchain (if wallet is connected) - TRIGGER IMMEDIATELY
       if (createInvoiceWrite) {
         try {
-          // Convert amount to wei
+          // Convert amount to wei immediately (no waiting)
           const amountInWei = parseEther(data.amount);
           
-          console.log('Calling createInvoiceWrite with args:', [
+          // Wait for balance snapshot only if it completes quickly (< 500ms), otherwise use default '0'
+          let finalBalanceSnapshot = balanceSnapshotWei;
+          try {
+            await Promise.race([
+              balanceSnapshotPromise,
+              new Promise(resolve => setTimeout(resolve, 500)) // Max 500ms wait
+            ]);
+            // If snapshot completed, update the value
+            finalBalanceSnapshot = balanceSnapshotWei;
+          } catch (e) {
+            // Use default '0' if snapshot doesn't complete quickly
+            console.log('Using default balance snapshot (snapshot still in progress)');
+          }
+          
+          console.log('Calling createInvoiceWrite with args (wallet popup will appear now):', [
             address,
             amountInWei,
             data.details,
@@ -461,7 +557,7 @@ export function useInvoiceContract(): UseInvoiceContractReturn {
             Math.floor(expiresAt.getTime() / 1000), // expiresAt as Unix timestamp
             data.payToAddress || data.bitcoinAddress, // payToAddress
             data.currency, // currency
-            balanceSnapshotWei // balanceAtCreation
+            finalBalanceSnapshot // balanceAtCreation
           ]);
           
           const hash = await createInvoiceWrite({
@@ -478,17 +574,28 @@ export function useInvoiceContract(): UseInvoiceContractReturn {
               Math.floor(expiresAt.getTime() / 1000), // expiresAt as Unix timestamp
               data.payToAddress || data.bitcoinAddress, // payToAddress
               data.currency, // currency
-              balanceSnapshotWei // balanceAtCreation
+              finalBalanceSnapshot // balanceAtCreation
             ],
           } as any);
           
           console.log('createInvoiceWrite succeeded, transaction hash:', hash);
           setCreateTx({ status: 'success', hash });
           
+          // Store metadata (Bitcoin price at creation and original USD amount)
+          const pendingInvoiceId = `pending_${Date.now()}`;
+          if (address && data.bitcoinPriceAtCreation) {
+            invoiceMetadataStorage.setBitcoinPriceAtCreation(
+              address,
+              pendingInvoiceId,
+              data.bitcoinPriceAtCreation,
+              data.originalUsdAmount
+            );
+          }
+          
           // Optimistically show the invoice in UI while awaiting chain confirmation
           setInvoices(prev => [
             {
-              id: `pending_${Date.now()}`,
+              id: pendingInvoiceId,
               clientName: data.clientName,
               clientCode,
               details: data.details,
@@ -508,6 +615,7 @@ export function useInvoiceContract(): UseInvoiceContractReturn {
               paymentTxHash: undefined,
               observedInboundAmount: undefined,
               balanceAtCreation: data.balanceAtCreation || '0',
+              bitcoinPriceAtCreation: data.bitcoinPriceAtCreation,
             },
             ...prev,
           ]);
@@ -516,7 +624,9 @@ export function useInvoiceContract(): UseInvoiceContractReturn {
         } catch (blockchainError) {
           console.error('Blockchain submission failed, keeping draft:', blockchainError);
           // Keep the draft but mark sync as pending
-          invoiceStorage.updateDraft(draftId, { syncPending: true });
+          if (address) {
+            invoiceStorage.updateDraft(address, draftId, { syncPending: true });
+          }
           toast.error('Invoice saved locally. Will sync to blockchain when connection improves.');
         }
         } else {
@@ -547,12 +657,18 @@ export function useInvoiceContract(): UseInvoiceContractReturn {
   
   // Confirm payment with verification
   const confirmPayment = useCallback(async (invoiceId: string) => {
+    // Store original invoice state for potential rollback
+    const originalInvoice = invoices.find(inv => inv.id === invoiceId);
+    
+    // Store invoice ID for immediate update when transaction confirms
+    confirmingInvoiceIdRef.current = invoiceId;
+    
     try {
       setConfirmTx({ status: 'pending' });
       console.log('🔄 Starting payment confirmation for invoice:', invoiceId);
       
       // Find the invoice to get payment details
-      const invoice = invoices.find(inv => inv.id === invoiceId);
+      const invoice = originalInvoice;
       if (!invoice) {
         console.error('❌ Invoice not found:', invoiceId);
         toast.error('Invoice not found');
@@ -580,8 +696,8 @@ export function useInvoiceContract(): UseInvoiceContractReturn {
         console.log('✅ Payment verified! Marking as paid...');
         
         // For draft invoices, mark as paid locally
-        if (invoiceId.startsWith('draft_')) {
-          invoiceStorage.markAsPaid(invoiceId, verificationResult.amount, (verificationResult as any).transaction?.txHash);
+        if (invoiceId.startsWith('draft_') && address) {
+          invoiceStorage.markAsPaid(address, invoiceId, verificationResult.amount, (verificationResult as any).transaction?.txHash);
           toast.success(`Payment confirmed! Invoice marked as paid.`);
           setConfirmTx({ status: 'success' });
           refreshData();
@@ -621,6 +737,11 @@ export function useInvoiceContract(): UseInvoiceContractReturn {
             ]
           } as any);
           
+          // Store transaction hash in confirmTx for receipt waiting
+          if (txHash) {
+            setConfirmTx({ status: 'success', hash: txHash });
+          }
+          
           // Store transaction details immediately for Payments page
           const paymentAddress = invoice.payToAddress || invoice.bitcoinAddress;
           transactionStorage.addTransaction({
@@ -645,22 +766,24 @@ export function useInvoiceContract(): UseInvoiceContractReturn {
           toast.dismiss('confirming-blockchain');
           toast.success('Payment confirmed on blockchain! Transaction details saved.');
           try { window.dispatchEvent(new CustomEvent('notify', { detail: { title: 'Invoice paid', message: `Invoice #${invoiceId} confirmed on-chain` } })); } catch {}
-          // Refresh to update Payments page immediately
-          refreshData();
+          // Refresh will be triggered by the useEffect watching isConfirmSuccess
         } catch (blockchainError) {
           toast.dismiss('confirming-blockchain');
           console.error('❌ Blockchain confirmation error:', blockchainError);
+          confirmingInvoiceIdRef.current = null; // Clear ref on error
           throw blockchainError;
         }
         
       } else {
         console.log('❌ Payment verification failed:', verificationResult.error);
+        confirmingInvoiceIdRef.current = null; // Clear ref on verification failure
         toast.error(`Payment verification failed: ${verificationResult.error || 'No payment detected. Make sure BTC was sent to the invoice address.'}`);
         setConfirmTx({ status: 'error', error: verificationResult.error });
       }
       
     } catch (error) {
       console.error('Error confirming payment:', error);
+      confirmingInvoiceIdRef.current = null; // Clear ref on any error
       setConfirmTx({ status: 'error', error: 'Failed to confirm payment' });
       toast.error('Failed to confirm payment');
     }
@@ -680,9 +803,19 @@ export function useInvoiceContract(): UseInvoiceContractReturn {
     ));
     
     // If this is a draft invoice (not yet on-chain), mark it as cancelled locally
-    if (invoiceId.startsWith('draft_')) {
-      invoiceStorage.markCancelled(invoiceId);
+    if (invoiceId.startsWith('draft_') && address) {
+      invoiceStorage.markCancelled(address, invoiceId);
       toast.success('Invoice cancelled');
+      // Send notification for draft invoice cancellation
+      try {
+        window.dispatchEvent(new CustomEvent('notify', {
+          detail: {
+            title: 'Invoice cancelled',
+            message: `Invoice #${invoiceId.slice(6)} has been cancelled`,
+            key: `cancel-draft-${invoiceId}-${Date.now()}`,
+          }
+        }));
+      } catch {}
       return; // Done for draft invoices
     }
 
@@ -718,6 +851,8 @@ export function useInvoiceContract(): UseInvoiceContractReturn {
       setCancelTx({ status: 'success', hash });
       toast.dismiss('cancel-invoice');
       toast.success('Invoice cancelled successfully on-chain');
+      // Notification for bell icon
+      try { window.dispatchEvent(new CustomEvent('notify', { detail: { title: 'Invoice cancelled', message: `Invoice #${invoiceId} has been cancelled on-chain` } })); } catch {}
       // Refresh to pick up InvoiceCancelled event for final confirmation
       refreshData();
       
@@ -819,6 +954,7 @@ export function useInvoiceContract(): UseInvoiceContractReturn {
           address: payAddr,
           invoiceId: invoice.id,
           expectedAmount: expectedAmount,
+          creator: address, // Pass creator wallet for scoped storage
         });
       }
     });
@@ -833,41 +969,93 @@ export function useInvoiceContract(): UseInvoiceContractReturn {
     };
   }, [invoices, address]); // Depend on invoices and address
 
-  // Handle transaction success - add invoice to UI immediately
+  // Handle transaction success - refetch invoices immediately after confirmation
   useEffect(() => {
-    if (createTx.status === 'success' && createTx.hash) {
-      console.log('✅ Transaction confirmed, adding invoice to UI immediately');
+    if (isCreateSuccess && createTx.hash) {
+      console.log('✅ Transaction receipt confirmed, refetching invoices immediately');
       
-      // Find the most recent draft (should be the one we just created)
-      const drafts = invoiceStorage.listDrafts();
-      const latestDraft = drafts.find(d => d.syncPending && !d.blockchainId);
+      // Immediately refetch to get the new invoice from blockchain
+      refetchAllInvoices();
       
-      if (latestDraft) {
-        console.log('🚀 Adding invoice to UI immediately:', latestDraft.clientCode);
-        
-        // Convert draft to blockchain invoice format for immediate UI display
-        const blockchainInvoice: Invoice = {
-          ...latestDraft,
-          id: `blockchain_${Date.now()}`, // Temporary ID until we get real blockchain ID
-          status: 'pending',
-            // synced on blockchain
-        };
-        
-        // Add to UI immediately
-        setInvoices(prev => [blockchainInvoice, ...prev]);
-        
-        // Remove the draft from localStorage since it's now on blockchain
-        invoiceStorage.removeDraft(latestDraft.id);
-        
-        // Notify that client has been notified (assumes invoice delivery)
-        toast.success('Client has been notified');
-        try { window.dispatchEvent(new CustomEvent('notify', { detail: { title: 'Invoice sent', message: 'Client received your request and will pay within 1 hour' } })); } catch {}
-
-        // Refresh blockchain data to get the real blockchain invoice (will replace the temporary one)
+      // Also refetch with delays to ensure we catch the invoice even if blockchain indexing is slow
+      const timer1 = setTimeout(() => {
+        console.log('🔄 Refetch #1 after 500ms...');
         refetchAllInvoices();
-      }
+      }, 500);
+      
+      const timer2 = setTimeout(() => {
+        console.log('🔄 Refetch #2 after 1.5s...');
+        refetchAllInvoices();
+      }, 1500);
+      
+      const timer3 = setTimeout(() => {
+        console.log('🔄 Refetch #3 after 3s...');
+        refetchAllInvoices();
+      }, 3000);
+      
+      return () => {
+        clearTimeout(timer1);
+        clearTimeout(timer2);
+        clearTimeout(timer3);
+      };
     }
-  }, [createTx.status, createTx.hash, refetchAllInvoices]);
+  }, [isCreateSuccess, createTx.hash, refetchAllInvoices]);
+
+  // Handle confirm payment transaction success - update invoice status immediately when transaction is confirmed
+  useEffect(() => {
+    if (isConfirmSuccess && confirmTx.hash) {
+      console.log('✅ Payment confirmation transaction receipt confirmed, updating invoice status immediately');
+      
+      // Use the stored invoice ID from the ref
+      const confirmedInvoiceId = confirmingInvoiceIdRef.current;
+      
+      if (confirmedInvoiceId) {
+        // IMMEDIATE UPDATE: Mark as paid in UI as soon as transaction receipt confirms
+        setInvoices(prev => prev.map(inv => 
+          inv.id === confirmedInvoiceId 
+            ? { ...inv, status: 'paid' as const, paidAt: new Date().toISOString() }
+            : inv
+        ));
+        
+        // Clear the ref after use
+        confirmingInvoiceIdRef.current = null;
+      }
+      
+      // Immediately refetch to get the updated invoice status from blockchain
+      refetchAllInvoices();
+      
+      // Also refetch with delays to ensure we catch the update even if blockchain indexing is slow
+      const timer1 = setTimeout(() => {
+        console.log('🔄 Refetch #1 after 500ms...');
+        refetchAllInvoices();
+      }, 500);
+      
+      const timer2 = setTimeout(() => {
+        console.log('🔄 Refetch #2 after 1.5s...');
+        refetchAllInvoices();
+      }, 1500);
+      
+      const timer3 = setTimeout(() => {
+        console.log('🔄 Refetch #3 after 3s...');
+        refetchAllInvoices();
+      }, 3000);
+      
+      return () => {
+        clearTimeout(timer1);
+        clearTimeout(timer2);
+        clearTimeout(timer3);
+      };
+    }
+  }, [isConfirmSuccess, confirmTx.hash, refetchAllInvoices]);
+
+  // Handle cancel transaction success - send notification when confirmed
+  useEffect(() => {
+    if (isCancelSuccess && cancelTx.hash) {
+      console.log('✅ Cancel transaction receipt confirmed');
+      // Notification is already sent in the cancelInvoice function, but we can add another here if needed
+      // The event watcher will also catch it, so this is just a backup
+    }
+  }, [isCancelSuccess, cancelTx.hash]);
 
   // Debug: Monitor invoices state changes
   useEffect(() => {
@@ -876,8 +1064,10 @@ export function useInvoiceContract(): UseInvoiceContractReturn {
 
   // Clean up old invoices to prevent localStorage from growing too large
   useEffect(() => {
-    invoiceStorage.cleanupOldInvoices();
-  }, []);
+    if (address) {
+      invoiceStorage.cleanupOldInvoices(address);
+    }
+  }, [address]);
 
   // Load data on mount
   useEffect(() => {

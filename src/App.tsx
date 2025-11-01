@@ -8,6 +8,7 @@ import { Dashboard } from '@/pages/Dashboard';
 import { Invoices } from '@/pages/Invoices';
 import { Payments } from '@/pages/Payments';
 import { Vault } from '@/pages/Vault';
+import { Market } from '@/pages/Market';
 import { Settings } from '@/pages/Settings';
 import { Analytics } from '@/pages/Analytics';
 import { useWalletUtils } from '@/hooks/useWalletUtils';
@@ -28,10 +29,16 @@ function App() {
   // Get invoices from blockchain
   const { invoices, stats } = useInvoiceContract();
   
-  // Load local invoices and refresh periodically
+  // Load local invoices and refresh periodically (only when wallet is connected)
+  const { address } = useAccount();
   useEffect(() => {
+    if (!address) {
+      setLocalInvoices([]);
+      return;
+    }
+    
     const loadLocalInvoices = () => {
-      const drafts = invoiceStorage.listDrafts();
+      const drafts = invoiceStorage.listDrafts(address);
       setLocalInvoices(drafts);
     };
     
@@ -41,7 +48,7 @@ function App() {
     const interval = setInterval(loadLocalInvoices, 5000);
     
     return () => clearInterval(interval);
-  }, []);
+  }, [address]);
 
   // Combine blockchain invoices with local invoices safely (avoid duplicates)
   const allInvoices = (() => {
@@ -91,6 +98,8 @@ function App() {
         return <Payments invoices={allInvoices} />;
       case 'vault':
         return <Vault />;
+      case 'market':
+        return <Market />;
       case 'settings':
         return <Settings />;
       case 'analytics':

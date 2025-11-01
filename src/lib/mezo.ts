@@ -31,8 +31,8 @@ export const MEZO_CONTRACTS = {
   BORROW_MANAGER: '0x1234567890123456789012345678901234567890', // Placeholder - will be updated after deployment
   STABILITY_POOL: '0x1234567890123456789012345678901234567890', // Placeholder - will be updated after deployment
   TROVE_MANAGER: '0x1234567890123456789012345678901234567890', // Placeholder - will be updated after deployment
-  MEZO_VAULT: '0xE4e18d7AED75FCB48ee20822B5880086DcA0724a', // Our custom vault contract - will be updated after deployment
-  INVOICE_CONTRACT: '0x2992a9765D1c95684BB8167cA82970Bf69a94675', // Latest deployment on Mezo testnet
+  MEZO_VAULT: '0xA5E09982AF04BF985feD9aE53F802F8479Cd64d1', // Our custom vault contract - will be updated after deployment
+  INVOICE_CONTRACT: '0x94EE7C985E36181B80B78Ff009b1826C6c6C72b2', // Latest deployment on Mezo testnet
 };
 
 // Contract ABIs for Mezo integration - using full compiled ABI for better compatibility

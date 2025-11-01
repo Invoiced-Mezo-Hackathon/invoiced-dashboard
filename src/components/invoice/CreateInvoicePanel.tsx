@@ -28,6 +28,7 @@ export function CreateInvoicePanel({ onInvoiceCreated }: CreateInvoicePanelProps
   const [bitcoinPrice, setBitcoinPrice] = useState<number>(0);
   const [isLoadingPrice, setIsLoadingPrice] = useState(true);
   const [inputCurrency, setInputCurrency] = useState<'USD' | 'BTC'>('USD');
+  const [copiedAddress, setCopiedAddress] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Fetch real-time Bitcoin price
@@ -119,6 +120,23 @@ export function CreateInvoicePanel({ onInvoiceCreated }: CreateInvoicePanelProps
     return ethereumPattern.test(address);
   };
 
+  const handleCopyAddress = async () => {
+    if (!bitcoinAddress.trim()) {
+      toast.error('No address to copy');
+      return;
+    }
+    
+    try {
+      await navigator.clipboard.writeText(bitcoinAddress);
+      setCopiedAddress(true);
+      toast.success('Address copied to clipboard!');
+      setTimeout(() => setCopiedAddress(false), 2000);
+    } catch (error) {
+      console.error('Failed to copy address:', error);
+      toast.error('Failed to copy address');
+    }
+  };
+
   const handleSendInvoice = async () => {
     if (!isConnected) {
       toast.error('Please connect your wallet');
@@ -165,9 +183,13 @@ export function CreateInvoicePanel({ onInvoiceCreated }: CreateInvoicePanelProps
         console.warn('Failed to snapshot balance at creation, proceeding with 0:', e);
       }
 
+      // Store Bitcoin price and original USD amount for metadata (before creating invoice)
+      // This will be saved after invoice is created with its ID
+      const originalUsdAmount = inputCurrency === 'USD' ? parseFloat(usdAmount) : undefined;
+      
       // Call smart contract - store the original currency and BTC amount
       // Map BTC to USD for InvoiceFormData (contract expects 'USD' | 'KES')
-      await createBlockchainInvoice({
+      const invoiceResult = await createBlockchainInvoice({
         clientName,
         details,
         amount: finalBitcoinAmount.toString(), // Always BTC amount for on-chain storage
@@ -175,6 +197,8 @@ export function CreateInvoicePanel({ onInvoiceCreated }: CreateInvoicePanelProps
         bitcoinAddress,
         payToAddress: bitcoinAddress,
         balanceAtCreation,
+        bitcoinPriceAtCreation: bitcoinPrice, // Pass price for metadata storage
+        originalUsdAmount, // Pass original USD amount if applicable
       });
 
       // Reset form
@@ -362,14 +386,29 @@ export function CreateInvoicePanel({ onInvoiceCreated }: CreateInvoicePanelProps
                 <label className="block text-sm font-medium text-white/80 mb-2 font-navbar">
                   Receiving address *
                 </label>
-                <input
-                  type="text"
-                  value={bitcoinAddress}
-                  onChange={(e) => setBitcoinAddress(e.target.value)}
-                  className="w-full px-4 py-3 bg-[#2C2C2E]/40 backdrop-blur-xl border border-green-400/20 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent font-navbar"
-                  placeholder="0x1234567890123456789012345678901234567890"
-                  readOnly={!!address}
-                />
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={bitcoinAddress}
+                    onChange={(e) => setBitcoinAddress(e.target.value)}
+                    className="w-full px-4 py-3 pr-12 bg-[#2C2C2E]/40 backdrop-blur-xl border border-green-400/20 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent font-navbar"
+                    placeholder="0x1234567890123456789012345678901234567890"
+                    readOnly={!!address}
+                  />
+                  {bitcoinAddress && (
+                    <button
+                      onClick={handleCopyAddress}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-white/60 hover:text-green-400 hover:bg-white/10 rounded-lg transition-all duration-200 active:scale-95"
+                      title="Copy address"
+                    >
+                      {copiedAddress ? (
+                        <i className="fa-solid fa-check text-green-400"></i>
+                      ) : (
+                        <i className="fa-solid fa-copy"></i>
+                      )}
+                    </button>
+                  )}
+                </div>
                 <p className="text-xs text-white/60 mt-1 font-navbar">
                   Auto-detected from your connected wallet
                 </p>

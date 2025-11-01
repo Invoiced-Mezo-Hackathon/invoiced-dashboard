@@ -1,11 +1,13 @@
 // Transaction Details Modal Component
 // Shows comprehensive transaction information with explorer links
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { X, ExternalLink, Copy, CheckCircle, Clock, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { StoredTransaction } from '@/services/transaction-storage';
 import { MEZO_EXPLORER_URL } from '@/lib/boar-config';
+import { usePublicClient } from 'wagmi';
+import { formatEther, formatGwei } from 'viem';
 
 interface TransactionDetailsModalProps {
   isOpen: boolean;
@@ -15,6 +17,70 @@ interface TransactionDetailsModalProps {
 
 export function TransactionDetailsModal({ isOpen, onClose, transaction }: TransactionDetailsModalProps) {
   const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [txDetails, setTxDetails] = useState<any>(null);
+  const [isLoadingDetails, setIsLoadingDetails] = useState(false);
+  const publicClient = usePublicClient();
+
+  // Fetch full transaction details from Mezo testnet
+  useEffect(() => {
+    if (!isOpen || !transaction || !transaction.txHash || !publicClient) return;
+
+    const fetchTransactionDetails = async () => {
+      setIsLoadingDetails(true);
+      try {
+        // Fetch transaction receipt for gas details
+        const receipt = await publicClient.getTransactionReceipt({
+          hash: transaction.txHash as `0x${string}`,
+        });
+
+        // Fetch transaction details
+        const tx = await publicClient.getTransaction({
+          hash: transaction.txHash as `0x${string}`,
+        });
+
+        // Get block details for timestamp
+        let blockTimestamp = transaction.timestamp;
+        if (receipt?.blockNumber) {
+          try {
+            const block = await publicClient.getBlock({
+              blockNumber: receipt.blockNumber,
+            });
+            blockTimestamp = Number(block.timestamp);
+          } catch (e) {
+            console.warn('Could not fetch block timestamp:', e);
+          }
+        }
+
+        setTxDetails({
+          gasUsed: receipt?.gasUsed ? receipt.gasUsed.toString() : undefined,
+          gasPrice: tx?.gasPrice ? tx.gasPrice.toString() : undefined,
+          effectiveGasPrice: receipt?.effectiveGasPrice ? receipt.effectiveGasPrice.toString() : undefined,
+          blockTimestamp,
+          blockNumber: receipt?.blockNumber ? Number(receipt.blockNumber) : transaction.blockNumber,
+          from: tx?.from || transaction.from,
+          to: tx?.to || transaction.to,
+          value: tx?.value ? tx.value.toString() : transaction.amount,
+          nonce: tx?.nonce,
+          transactionIndex: receipt?.transactionIndex,
+          status: receipt?.status === 'success' ? 'confirmed' : receipt?.status === 'reverted' ? 'failed' : 'pending',
+        });
+      } catch (error) {
+        console.error('Failed to fetch transaction details:', error);
+        // Fallback to stored transaction data
+        setTxDetails({
+          from: transaction.from,
+          to: transaction.to,
+          blockNumber: transaction.blockNumber,
+          blockTimestamp: transaction.timestamp,
+          status: transaction.status,
+        });
+      } finally {
+        setIsLoadingDetails(false);
+      }
+    };
+
+    fetchTransactionDetails();
+  }, [isOpen, transaction, publicClient]);
 
   if (!isOpen || !transaction) return null;
 
@@ -84,9 +150,9 @@ export function TransactionDetailsModal({ isOpen, onClose, transaction }: Transa
         <div className="p-6 space-y-6">
           {/* Status */}
           <div className="flex items-center gap-3">
-            {getStatusIcon(transaction.status)}
-            <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(transaction.status)}`}>
-              {transaction.status.toUpperCase()}
+            {getStatusIcon(txDetails?.status || transaction.status)}
+            <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(txDetails?.status || transaction.status)}`}>
+              {(txDetails?.status || transaction.status).toUpperCase()}
             </span>
             {transaction.confirmations > 0 && (
               <span className="text-sm text-white/60">
@@ -130,8 +196,11 @@ export function TransactionDetailsModal({ isOpen, onClose, transaction }: Transa
             <label className="text-sm font-medium text-white/80">Amount</label>
             <div className="p-3 rounded-lg bg-white/5 border border-white/10">
               <div className="text-lg font-semibold text-green-400">
-                {formatAmount(transaction.amount)} BTC
+                {formatAmount(txDetails?.value || transaction.amount)} BTC
               </div>
+              {isLoadingDetails && (
+                <div className="text-xs text-white/50 mt-1">Loading transaction details...</div>
+              )}
             </div>
           </div>
 
@@ -140,12 +209,12 @@ export function TransactionDetailsModal({ isOpen, onClose, transaction }: Transa
             <label className="text-sm font-medium text-white/80">From Address</label>
             <div className="flex items-center gap-2 p-3 rounded-lg bg-white/5 border border-white/10">
               <code className="flex-1 text-sm text-white/90 font-mono">
-                {transaction.from}
+                {txDetails?.from || transaction.from || 'N/A'}
               </code>
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => copyToClipboard(transaction.from, 'from')}
+                onClick={() => copyToClipboard(txDetails?.from || transaction.from || '', 'from')}
                 className="text-white/60 hover:text-white hover:bg-white/10"
               >
                 {copiedField === 'from' ? (
@@ -157,7 +226,7 @@ export function TransactionDetailsModal({ isOpen, onClose, transaction }: Transa
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => window.open(`${MEZO_EXPLORER_URL}/address/${transaction.from}`, '_blank')}
+                onClick={() => window.open(`${MEZO_EXPLORER_URL}/address/${txDetails?.from || transaction.from}`, '_blank')}
                 className="text-white/60 hover:text-white hover:bg-white/10"
               >
                 <ExternalLink className="w-4 h-4" />
@@ -170,12 +239,12 @@ export function TransactionDetailsModal({ isOpen, onClose, transaction }: Transa
             <label className="text-sm font-medium text-white/80">To Address</label>
             <div className="flex items-center gap-2 p-3 rounded-lg bg-white/5 border border-white/10">
               <code className="flex-1 text-sm text-white/90 font-mono">
-                {transaction.to}
+                {txDetails?.to || transaction.to || 'N/A'}
               </code>
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => copyToClipboard(transaction.to, 'to')}
+                onClick={() => copyToClipboard(txDetails?.to || transaction.to || '', 'to')}
                 className="text-white/60 hover:text-white hover:bg-white/10"
               >
                 {copiedField === 'to' ? (
@@ -187,7 +256,7 @@ export function TransactionDetailsModal({ isOpen, onClose, transaction }: Transa
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => window.open(`${MEZO_EXPLORER_URL}/address/${transaction.to}`, '_blank')}
+                onClick={() => window.open(`${MEZO_EXPLORER_URL}/address/${txDetails?.to || transaction.to}`, '_blank')}
                 className="text-white/60 hover:text-white hover:bg-white/10"
               >
                 <ExternalLink className="w-4 h-4" />
@@ -201,7 +270,7 @@ export function TransactionDetailsModal({ isOpen, onClose, transaction }: Transa
               <label className="text-sm font-medium text-white/80">Block Number</label>
               <div className="p-3 rounded-lg bg-white/5 border border-white/10">
                 <div className="text-sm text-white/90 font-mono">
-                  #{transaction.blockNumber}
+                  #{txDetails?.blockNumber || transaction.blockNumber || 'N/A'}
                 </div>
               </div>
             </div>
@@ -209,11 +278,75 @@ export function TransactionDetailsModal({ isOpen, onClose, transaction }: Transa
               <label className="text-sm font-medium text-white/80">Timestamp</label>
               <div className="p-3 rounded-lg bg-white/5 border border-white/10">
                 <div className="text-sm text-white/90">
-                  {formatTimestamp(transaction.timestamp)}
+                  {txDetails?.blockTimestamp 
+                    ? formatTimestamp(txDetails.blockTimestamp) 
+                    : formatTimestamp(transaction.timestamp)}
                 </div>
               </div>
             </div>
           </div>
+
+          {/* Transaction Fee & Gas Information */}
+          {txDetails && (txDetails.gasUsed || txDetails.gasPrice) && (
+            <div className="grid grid-cols-2 gap-4">
+              {txDetails.gasUsed && (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-white/80">Gas Used</label>
+                  <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+                    <div className="text-sm text-white/90 font-mono">
+                      {Number(txDetails.gasUsed).toLocaleString()}
+                    </div>
+                  </div>
+                </div>
+              )}
+              {txDetails.effectiveGasPrice && (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-white/80">Gas Price</label>
+                  <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+                    <div className="text-sm text-white/90 font-mono">
+                      {formatGwei(BigInt(txDetails.effectiveGasPrice))} Gwei
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Transaction Fee */}
+          {txDetails?.gasUsed && txDetails?.effectiveGasPrice && (
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-white/80">Transaction Fee</label>
+              <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+                <div className="text-sm text-white/90">
+                  {formatEther(BigInt(txDetails.gasUsed) * BigInt(txDetails.effectiveGasPrice))} ETH
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Transaction Index */}
+          {txDetails?.transactionIndex !== undefined && (
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-white/80">Transaction Index</label>
+              <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+                <div className="text-sm text-white/90 font-mono">
+                  {txDetails.transactionIndex}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Nonce */}
+          {txDetails?.nonce !== undefined && (
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-white/80">Nonce</label>
+              <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+                <div className="text-sm text-white/90 font-mono">
+                  {txDetails.nonce}
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Invoice Information */}
           <div className="space-y-2">

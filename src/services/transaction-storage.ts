@@ -1,6 +1,12 @@
 // Transaction Storage Service
 // Handles persistence of detected Bitcoin transactions
 
+// Helper function to get storage key scoped by wallet address
+function getStorageKey(address: string | null | undefined): string {
+  if (!address) return '';
+  return `boar_transactions_${address.toLowerCase()}`;
+}
+
 export interface StoredTransaction {
   txHash: string;
   invoiceId: string;
@@ -20,37 +26,36 @@ export interface TransactionStorage {
 }
 
 class TransactionStorageService {
-  // kept for future file-based persistence (unused in browser env)
-  // private _storageFile = 'transactions.json';
-  private data: TransactionStorage = {
-    transactions: [],
-    lastUpdated: Date.now(),
-  };
-
-  constructor() {
-    this.loadFromStorage();
-  }
-
-  // Load transactions from JSON file
-  private loadFromStorage(): void {
+  // Load transactions from storage for a specific address (lazy loading)
+  private loadFromStorage(address: string | null | undefined): TransactionStorage {
+    if (!address) {
+      return { transactions: [], lastUpdated: Date.now() };
+    }
     try {
       if (typeof window !== 'undefined' && window.localStorage) {
-        const stored = localStorage.getItem('boar_transactions');
+        const storageKey = getStorageKey(address);
+        if (!storageKey) {
+          return { transactions: [], lastUpdated: Date.now() };
+        }
+        const stored = localStorage.getItem(storageKey);
         if (stored) {
-          this.data = JSON.parse(stored);
+          return JSON.parse(stored);
         }
       }
     } catch (error) {
       console.error('Failed to load transaction storage:', error);
-      this.data = { transactions: [], lastUpdated: Date.now() };
     }
+    return { transactions: [], lastUpdated: Date.now() };
   }
 
-  // Save transactions to JSON file
-  private saveToStorage(): void {
+  // Save transactions to storage for a specific address
+  private saveToStorage(address: string | null | undefined, data: TransactionStorage): void {
+    if (!address) return;
     try {
       if (typeof window !== 'undefined' && window.localStorage) {
-        localStorage.setItem('boar_transactions', JSON.stringify(this.data));
+        const storageKey = getStorageKey(address);
+        if (!storageKey) return;
+        localStorage.setItem(storageKey, JSON.stringify(data));
       }
     } catch (error) {
       console.error('Failed to save transaction storage:', error);
@@ -58,18 +63,20 @@ class TransactionStorageService {
   }
 
   // Add a new transaction
-  addTransaction(transaction: Omit<StoredTransaction, 'detectedAt'>): void {
+  addTransaction(address: string | null | undefined, transaction: Omit<StoredTransaction, 'detectedAt'>): void {
+    if (!address) return;
+    const data = this.loadFromStorage(address);
     const newTransaction: StoredTransaction = {
       ...transaction,
       detectedAt: Date.now(),
     };
 
     // Check if transaction already exists
-    const exists = this.data.transactions.find(tx => tx.txHash === transaction.txHash);
+    const exists = data.transactions.find(tx => tx.txHash === transaction.txHash);
     if (!exists) {
-      this.data.transactions.push(newTransaction);
-      this.data.lastUpdated = Date.now();
-      this.saveToStorage();
+      data.transactions.push(newTransaction);
+      data.lastUpdated = Date.now();
+      this.saveToStorage(address, data);
       try {
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('transactions_updated'));
@@ -79,28 +86,36 @@ class TransactionStorageService {
   }
 
   // Get all transactions
-  getAllTransactions(): StoredTransaction[] {
-    return [...this.data.transactions];
+  getAllTransactions(address: string | null | undefined): StoredTransaction[] {
+    if (!address) return [];
+    const data = this.loadFromStorage(address);
+    return [...data.transactions];
   }
 
   // Get transactions for a specific invoice
-  getTransactionsForInvoice(invoiceId: string): StoredTransaction[] {
-    return this.data.transactions.filter(tx => tx.invoiceId === invoiceId);
+  getTransactionsForInvoice(address: string | null | undefined, invoiceId: string): StoredTransaction[] {
+    if (!address) return [];
+    const data = this.loadFromStorage(address);
+    return data.transactions.filter(tx => tx.invoiceId === invoiceId);
   }
 
   // Get transaction by hash
-  getTransactionByHash(txHash: string): StoredTransaction | undefined {
-    return this.data.transactions.find(tx => tx.txHash === txHash);
+  getTransactionByHash(address: string | null | undefined, txHash: string): StoredTransaction | undefined {
+    if (!address) return undefined;
+    const data = this.loadFromStorage(address);
+    return data.transactions.find(tx => tx.txHash === txHash);
   }
 
   // Update transaction confirmations
-  updateTransactionConfirmations(txHash: string, confirmations: number): void {
-    const transaction = this.data.transactions.find(tx => tx.txHash === txHash);
+  updateTransactionConfirmations(address: string | null | undefined, txHash: string, confirmations: number): void {
+    if (!address) return;
+    const data = this.loadFromStorage(address);
+    const transaction = data.transactions.find(tx => tx.txHash === txHash);
     if (transaction) {
       transaction.confirmations = confirmations;
       transaction.status = confirmations >= 1 ? 'confirmed' : 'pending';
-      this.data.lastUpdated = Date.now();
-      this.saveToStorage();
+      data.lastUpdated = Date.now();
+      this.saveToStorage(address, data);
       try {
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('transactions_updated'));
@@ -110,12 +125,14 @@ class TransactionStorageService {
   }
 
   // Update transaction status
-  updateTransactionStatus(txHash: string, status: 'pending' | 'confirmed' | 'failed'): void {
-    const transaction = this.data.transactions.find(tx => tx.txHash === txHash);
+  updateTransactionStatus(address: string | null | undefined, txHash: string, status: 'pending' | 'confirmed' | 'failed'): void {
+    if (!address) return;
+    const data = this.loadFromStorage(address);
+    const transaction = data.transactions.find(tx => tx.txHash === txHash);
     if (transaction) {
       transaction.status = status;
-      this.data.lastUpdated = Date.now();
-      this.saveToStorage();
+      data.lastUpdated = Date.now();
+      this.saveToStorage(address, data);
       try {
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('transactions_updated'));
@@ -125,17 +142,23 @@ class TransactionStorageService {
   }
 
   // Get recent transactions (last 24 hours)
-  getRecentTransactions(): StoredTransaction[] {
+  getRecentTransactions(address: string | null | undefined): StoredTransaction[] {
+    if (!address) return [];
+    const data = this.loadFromStorage(address);
     const oneDayAgo = Date.now() - (24 * 60 * 60 * 1000);
-    return this.data.transactions.filter(tx => tx.detectedAt > oneDayAgo);
+    return data.transactions.filter(tx => tx.detectedAt > oneDayAgo);
   }
 
-  // Clear all transactions (for testing)
-  clearAllTransactions(): void {
+  // Clear all transactions for a specific wallet (for testing)
+  clearAllTransactions(address: string | null | undefined): void {
+    if (!address) return;
     try {
       if (typeof window !== 'undefined' && window.localStorage) {
-        localStorage.removeItem('boar_transactions');
-        console.log('✅ Cleared all transactions');
+        const storageKey = getStorageKey(address);
+        if (storageKey) {
+          localStorage.removeItem(storageKey);
+          console.log('✅ Cleared all transactions for wallet:', address);
+        }
       }
     } catch (error) {
       console.error('Failed to clear transactions:', error);
@@ -143,10 +166,14 @@ class TransactionStorageService {
   }
 
   // Get storage statistics
-  getStats(): { totalTransactions: number; confirmedTransactions: number; pendingTransactions: number } {
-    const total = this.data.transactions.length;
-    const confirmed = this.data.transactions.filter(tx => tx.status === 'confirmed').length;
-    const pending = this.data.transactions.filter(tx => tx.status === 'pending').length;
+  getStats(address: string | null | undefined): { totalTransactions: number; confirmedTransactions: number; pendingTransactions: number } {
+    if (!address) {
+      return { totalTransactions: 0, confirmedTransactions: 0, pendingTransactions: 0 };
+    }
+    const data = this.loadFromStorage(address);
+    const total = data.transactions.length;
+    const confirmed = data.transactions.filter(tx => tx.status === 'confirmed').length;
+    const pending = data.transactions.filter(tx => tx.status === 'pending').length;
 
     return { totalTransactions: total, confirmedTransactions: confirmed, pendingTransactions: pending };
   }

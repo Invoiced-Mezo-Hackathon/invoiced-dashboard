@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Bell } from 'lucide-react';
+import { useAccount } from 'wagmi';
 
 export type AppNotification = {
   id: string;
@@ -9,20 +10,30 @@ export type AppNotification = {
   read: boolean;
 };
 
-const STORAGE_KEY = 'invoiced_notifications';
+// Helper function to get storage key scoped by wallet address
+function getStorageKey(address: string | null | undefined): string {
+  if (!address) return '';
+  return `notifications_${address.toLowerCase()}`;
+}
 
-function loadNotifications(): AppNotification[] {
+function loadNotifications(address: string | null | undefined): AppNotification[] {
+  if (!address) return [];
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const storageKey = getStorageKey(address);
+    if (!storageKey) return [];
+    const raw = localStorage.getItem(storageKey);
     return raw ? JSON.parse(raw) : [];
   } catch {
     return [];
   }
 }
 
-function saveNotifications(list: AppNotification[]) {
+function saveNotifications(address: string | null | undefined, list: AppNotification[]) {
+  if (!address) return;
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+    const storageKey = getStorageKey(address);
+    if (!storageKey) return;
+    localStorage.setItem(storageKey, JSON.stringify(list));
   } catch {}
 }
 
@@ -41,6 +52,7 @@ function notificationsEnabled(): boolean {
 }
 
 export function NotificationBell() {
+  const { address } = useAccount();
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<AppNotification[]>([]);
   const itemsRef = useRef<AppNotification[]>([]);
@@ -48,13 +60,21 @@ export function NotificationBell() {
 
   useEffect(() => { itemsRef.current = items; }, [items]);
 
-  // Load on mount
+  // Load on mount and when address changes, sort by timestamp (newest first)
   useEffect(() => {
-    setItems(loadNotifications());
-  }, []);
+    if (!address) {
+      setItems([]);
+      return;
+    }
+    const loaded = loadNotifications(address);
+    // Sort by timestamp descending (newest first)
+    const sorted = loaded.sort((a, b) => b.timestamp - a.timestamp);
+    setItems(sorted);
+  }, [address]);
 
   // Listen for global notifications
   useEffect(() => {
+    if (!address) return;
     const handler = (e: Event) => {
       if (!notificationsEnabled()) return;
       const detail = (e as CustomEvent).detail as Partial<AppNotification> | undefined;
@@ -81,28 +101,32 @@ export function NotificationBell() {
         read: false,
       };
       setItems(prev => {
-        const updated = [next, ...prev].slice(0, 50);
-        saveNotifications(updated);
+        const updated = [next, ...prev]
+          .sort((a, b) => b.timestamp - a.timestamp) // Ensure newest first
+          .slice(0, 50);
+        saveNotifications(address, updated);
         return updated;
       });
     };
     window.addEventListener('notify', handler as EventListener);
     return () => window.removeEventListener('notify', handler as EventListener);
-  }, []);
+  }, [address]);
 
   const unread = useMemo(() => items.filter(i => !i.read).length, [items]);
 
   const markAllRead = () => {
+    if (!address) return;
     setItems(prev => {
       const updated = prev.map(i => ({ ...i, read: true }));
-      saveNotifications(updated);
+      saveNotifications(address, updated);
       return updated;
     });
   };
 
   const clearAll = () => {
+    if (!address) return;
     setItems([]);
-    saveNotifications([]);
+    saveNotifications(address, []);
     setOpen(false);
   };
 

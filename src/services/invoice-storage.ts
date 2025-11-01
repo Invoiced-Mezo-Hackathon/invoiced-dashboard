@@ -1,7 +1,11 @@
 import { Invoice } from '@/types/invoice';
 import { parseEther } from 'viem';
 
-const STORAGE_KEY = 'invoiced_local_drafts_v1';
+// Helper function to get storage key scoped by wallet address
+function getStorageKey(address: string | null | undefined): string {
+  if (!address) return '';
+  return `invoiced_local_drafts_v1_${address.toLowerCase()}`;
+}
 
 export interface DraftInvoice extends Omit<Invoice, 'id'> {
   id: string; // Will be 'draft_<timestamp>'
@@ -10,12 +14,12 @@ export interface DraftInvoice extends Omit<Invoice, 'id'> {
 }
 
 class InvoiceStorage {
-  private getDrafts(): DraftInvoice[] {
+  private getDrafts(address: string | null | undefined): DraftInvoice[] {
+    if (!address) return [];
     try {
-      // First, try to migrate old data
-      this.migrateOldData();
-      
-      const stored = localStorage.getItem(STORAGE_KEY);
+      const storageKey = getStorageKey(address);
+      if (!storageKey) return [];
+      const stored = localStorage.getItem(storageKey);
       return stored ? JSON.parse(stored) : [];
     } catch (error) {
       console.error('Error reading drafts from localStorage:', error);
@@ -23,88 +27,20 @@ class InvoiceStorage {
     }
   }
 
-  // Migrate invoices from old storage format
-  private migrateOldData(): void {
+  private saveDrafts(address: string | null | undefined, drafts: DraftInvoice[]): void {
+    if (!address) return;
     try {
-      if (typeof window !== 'undefined' && window.localStorage) {
-        // Check if we've already migrated
-        const migrationKey = 'invoiced_migration_completed';
-        if (localStorage.getItem(migrationKey)) {
-          return; // Already migrated
-        }
-
-        // Check for old invoice storage keys
-        const oldKeys = [];
-        for (let i = 0; i < localStorage.length; i++) {
-          const key = localStorage.key(i);
-          if (key && key.startsWith('invoiced_invoices_')) {
-            oldKeys.push(key);
-          }
-        }
-
-        // Migrate each old key
-        oldKeys.forEach(oldKey => {
-          const oldData = localStorage.getItem(oldKey);
-          if (oldData) {
-            try {
-              const oldInvoices = JSON.parse(oldData);
-              if (Array.isArray(oldInvoices)) {
-                // Convert old invoices to new format
-                const migratedInvoices = oldInvoices.map((oldInvoice: unknown) => ({
-                  ...(oldInvoice as Record<string, unknown>),
-                  // Ensure required fields exist
-                  expiresAt: (oldInvoice as { expiresAt?: string }).expiresAt || new Date(Date.now() + 60 * 60 * 1000).toISOString(),
-                  payToAddress: (oldInvoice as { payToAddress?: string; bitcoinAddress?: string }).payToAddress || (oldInvoice as { bitcoinAddress?: string }).bitcoinAddress || '',
-                  requestedAmount: (oldInvoice as { requestedAmount?: string; amount?: { toString: () => string } }).requestedAmount || (oldInvoice as { amount?: { toString: () => string } }).amount?.toString() || '0',
-                  balanceAtCreation: (oldInvoice as { balanceAtCreation?: string }).balanceAtCreation || '0',
-                  status: (oldInvoice as { status?: string }).status || 'pending',
-                }));
-
-                // Add to current drafts
-                const currentDrafts = this.getDraftsWithoutMigration();
-                const newDrafts = [...currentDrafts, ...migratedInvoices];
-                localStorage.setItem(STORAGE_KEY, JSON.stringify(newDrafts));
-
-                console.log(`✅ Migrated ${migratedInvoices.length} invoices from ${oldKey}`);
-                
-                // Remove old key after migration
-                localStorage.removeItem(oldKey);
-              }
-            } catch (error) {
-              console.warn(`⚠️ Failed to migrate invoices from ${oldKey}:`, error);
-            }
-          }
-        });
-
-        // Mark migration as completed
-        localStorage.setItem(migrationKey, 'true');
-      }
-    } catch (error) {
-      console.error('Failed to migrate old invoice data:', error);
-    }
-  }
-
-  // Helper method to get drafts without triggering migration
-  private getDraftsWithoutMigration(): DraftInvoice[] {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      return stored ? JSON.parse(stored) : [];
-    } catch (error) {
-      console.error('Error reading drafts from localStorage:', error);
-      return [];
-    }
-  }
-
-  private saveDrafts(drafts: DraftInvoice[]): void {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(drafts));
+      const storageKey = getStorageKey(address);
+      if (!storageKey) return;
+      localStorage.setItem(storageKey, JSON.stringify(drafts));
     } catch (error) {
       console.error('Error saving drafts to localStorage:', error);
     }
   }
 
-  saveDraft(draft: DraftInvoice): void {
-    const drafts = this.getDrafts();
+  saveDraft(address: string | null | undefined, draft: DraftInvoice): void {
+    if (!address) return;
+    const drafts = this.getDrafts(address);
     const existingIndex = drafts.findIndex(d => d.id === draft.id);
     
     if (existingIndex >= 0) {
@@ -113,47 +49,52 @@ class InvoiceStorage {
       drafts.push(draft);
     }
     
-    this.saveDrafts(drafts);
+    this.saveDrafts(address, drafts);
     console.log('💾 Draft saved:', draft.id, draft.clientName);
   }
 
-  updateDraft(id: string, updates: Partial<DraftInvoice>): void {
-    const drafts = this.getDrafts();
+  updateDraft(address: string | null | undefined, id: string, updates: Partial<DraftInvoice>): void {
+    if (!address) return;
+    const drafts = this.getDrafts(address);
     const index = drafts.findIndex(d => d.id === id);
     
     if (index >= 0) {
       drafts[index] = { ...drafts[index], ...updates };
-      this.saveDrafts(drafts);
+      this.saveDrafts(address, drafts);
       console.log('💾 Draft updated:', id, updates);
     }
   }
 
-  removeDraft(id: string): void {
-    const drafts = this.getDrafts();
+  removeDraft(address: string | null | undefined, id: string): void {
+    if (!address) return;
+    const drafts = this.getDrafts(address);
     const filtered = drafts.filter(d => d.id !== id);
-    this.saveDrafts(filtered);
+    this.saveDrafts(address, filtered);
     console.log('💾 Draft removed:', id);
   }
 
-  markCancelled(id: string): void {
-    const drafts = this.getDrafts();
+  markCancelled(address: string | null | undefined, id: string): void {
+    if (!address) return;
+    const drafts = this.getDrafts(address);
     const index = drafts.findIndex(d => d.id === id);
     
     if (index >= 0) {
       drafts[index] = { ...drafts[index], status: 'cancelled' };
-      this.saveDrafts(drafts);
+      this.saveDrafts(address, drafts);
       console.log('💾 Draft marked as cancelled:', id);
     }
   }
 
-  listDrafts(): DraftInvoice[] {
-    const drafts = this.getDrafts();
+  listDrafts(address: string | null | undefined): DraftInvoice[] {
+    if (!address) return [];
+    const drafts = this.getDrafts(address);
     console.log('💾 Loaded drafts:', drafts.length);
     return drafts;
   }
 
-  markSynced(draftId: string, blockchainId: string): void {
-    this.updateDraft(draftId, { 
+  markSynced(address: string | null | undefined, draftId: string, blockchainId: string): void {
+    if (!address) return;
+    this.updateDraft(address, draftId, { 
       blockchainId, 
       syncPending: false,
       status: 'pending' // Keep as pending until marked paid
@@ -161,7 +102,8 @@ class InvoiceStorage {
   }
 
   // Create a new invoice with proper timestamps and expiry
-  createInvoice(formData: unknown): DraftInvoice {
+  createInvoice(address: string | null | undefined, formData: unknown): DraftInvoice | null {
+    if (!address) return null;
     const now = new Date();
     const expiresAt = new Date(now.getTime() + 60 * 60 * 1000); // 1 hour from now
     
@@ -206,13 +148,14 @@ class InvoiceStorage {
       syncPending: true,
     };
 
-    this.saveDraft(invoice);
+    this.saveDraft(address, invoice);
     return invoice;
   }
 
   // Mark invoice as paid
-  markAsPaid(invoiceId: string, observedAmount?: string, txHash?: string): void {
-    this.updateDraft(invoiceId, {
+  markAsPaid(address: string | null | undefined, invoiceId: string, observedAmount?: string, txHash?: string): void {
+    if (!address) return;
+    this.updateDraft(address, invoiceId, {
       status: 'paid',
       paidAt: new Date().toISOString(),
       observedInboundAmount: observedAmount,
@@ -221,15 +164,17 @@ class InvoiceStorage {
   }
 
   // Mark invoice as expired
-  markAsExpired(invoiceId: string): void {
-    this.updateDraft(invoiceId, {
+  markAsExpired(address: string | null | undefined, invoiceId: string): void {
+    if (!address) return;
+    this.updateDraft(address, invoiceId, {
       status: 'expired',
     });
   }
 
   // Get invoices that are about to expire (within 5 minutes)
-  getExpiringInvoices(): DraftInvoice[] {
-    const drafts = this.getDrafts();
+  getExpiringInvoices(address: string | null | undefined): DraftInvoice[] {
+    if (!address) return [];
+    const drafts = this.getDrafts(address);
     const fiveMinutesFromNow = new Date(Date.now() + 5 * 60 * 1000);
     
     return drafts.filter(draft => {
@@ -240,8 +185,9 @@ class InvoiceStorage {
   }
 
   // Get expired invoices that need status update
-  getExpiredInvoices(): DraftInvoice[] {
-    const drafts = this.getDrafts();
+  getExpiredInvoices(address: string | null | undefined): DraftInvoice[] {
+    if (!address) return [];
+    const drafts = this.getDrafts(address);
     const now = new Date();
     
     return drafts.filter(draft => {
@@ -251,17 +197,19 @@ class InvoiceStorage {
     });
   }
 
-  clearSynced(): void {
+  clearSynced(address: string | null | undefined): void {
+    if (!address) return;
     // Remove drafts that have been synced to blockchain
-    const drafts = this.getDrafts();
+    const drafts = this.getDrafts(address);
     const unsynced = drafts.filter(d => !d.blockchainId);
-    this.saveDrafts(unsynced);
+    this.saveDrafts(address, unsynced);
     console.log('💾 Cleared synced drafts, kept:', unsynced.length);
   }
 
-  clearOldCancelled(): void {
+  clearOldCancelled(address: string | null | undefined): void {
+    if (!address) return;
     // Remove cancelled drafts older than 30 days
-    const drafts = this.getDrafts();
+    const drafts = this.getDrafts(address);
     const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
     const active = drafts.filter(d => {
       if (d.status === 'cancelled') {
@@ -270,13 +218,14 @@ class InvoiceStorage {
       }
       return true; // Keep all non-cancelled invoices
     });
-    this.saveDrafts(active);
+    this.saveDrafts(address, active);
     console.log('💾 Cleaned old cancelled drafts, kept:', active.length);
   }
 
-  cleanupOldInvoices(): void {
+  cleanupOldInvoices(address: string | null | undefined): void {
+    if (!address) return;
     // Clean up old invoices to prevent localStorage from growing too large
-    const drafts = this.getDrafts();
+    const drafts = this.getDrafts(address);
     const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
     const active = drafts.filter(d => {
       const createdAt = new Date(d.createdAt).getTime();
@@ -291,93 +240,44 @@ class InvoiceStorage {
     });
     
     if (active.length !== drafts.length) {
-      this.saveDrafts(active);
+      this.saveDrafts(address, active);
       console.log('💾 Cleaned up old invoices, kept:', active.length, 'removed:', drafts.length - active.length);
     }
   }
 
-  getDraftById(id: string): DraftInvoice | null {
-    const drafts = this.getDrafts();
+  getDraftById(address: string | null | undefined, id: string): DraftInvoice | null {
+    if (!address) return null;
+    const drafts = this.getDrafts(address);
     return drafts.find(d => d.id === id) || null;
   }
 
-  getPendingSyncDrafts(): DraftInvoice[] {
-    const drafts = this.getDrafts();
+  getPendingSyncDrafts(address: string | null | undefined): DraftInvoice[] {
+    if (!address) return [];
+    const drafts = this.getDrafts(address);
     return drafts.filter(d => d.syncPending && !d.blockchainId);
   }
 
-  // Clear all invoices (for testing)
-  clearAllInvoices(): void {
+  // Clear all invoices for a specific wallet (for testing)
+  clearAllInvoices(address: string | null | undefined): void {
+    if (!address) return;
     try {
       if (typeof window !== 'undefined' && window.localStorage) {
-        console.log('🧹 Starting invoice cleanup...');
+        console.log('🧹 Starting invoice cleanup for wallet:', address);
         
         // Log what we're about to clear
-        const currentDrafts = this.getDrafts();
+        const currentDrafts = this.getDrafts(address);
         console.log('📋 Current invoices before clearing:', currentDrafts.length);
         
-        // Clear main storage
-        localStorage.removeItem(STORAGE_KEY);
-        localStorage.removeItem('invoiced_migration_completed');
-        
-        // Clear any old invoice storage keys
-        const keysToRemove = [];
-        for (let i = 0; i < localStorage.length; i++) {
-          const key = localStorage.key(i);
-          if (key && (key.startsWith('invoiced_invoices_') || key.startsWith('invoiced_local_drafts'))) {
-            keysToRemove.push(key);
-          }
+        // Clear storage for this wallet
+        const storageKey = getStorageKey(address);
+        if (storageKey) {
+          localStorage.removeItem(storageKey);
         }
         
-        keysToRemove.forEach(key => {
-          localStorage.removeItem(key);
-          console.log('🗑️ Removed key:', key);
-        });
-        
-        // Verify clearing worked
-        const remainingDrafts = this.getDrafts();
-        console.log('✅ Verification - remaining invoices after clearing:', remainingDrafts.length);
-        
-        if (remainingDrafts.length > 0) {
-          console.warn('⚠️ Some invoices still remain:', remainingDrafts);
-        } else {
-          console.log('✅ All invoices cleared successfully');
-        }
+        console.log('✅ All invoices cleared for wallet:', address);
       }
     } catch (error) {
       console.error('Failed to clear invoices:', error);
-    }
-  }
-
-  // Force clear all data (manual override)
-  forceClearAllData(): void {
-    try {
-      if (typeof window !== 'undefined' && window.localStorage) {
-        console.log('🚨 FORCE CLEARING ALL DATA...');
-        
-        // Clear ALL localStorage keys that might contain invoice data
-        const allKeys = [];
-        for (let i = 0; i < localStorage.length; i++) {
-          const key = localStorage.key(i);
-          if (key && (
-            key.includes('invoice') || 
-            key.includes('draft') || 
-            key.includes('boar_transactions') ||
-            key.startsWith('invoiced_')
-          )) {
-            allKeys.push(key);
-          }
-        }
-        
-        allKeys.forEach(key => {
-          localStorage.removeItem(key);
-          console.log('🗑️ FORCE REMOVED:', key);
-        });
-        
-        console.log('✅ FORCE CLEAR COMPLETE');
-      }
-    } catch (error) {
-      console.error('Force clear failed:', error);
     }
   }
 }
