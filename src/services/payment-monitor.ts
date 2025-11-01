@@ -388,7 +388,7 @@ class PaymentMonitorService {
   }
 
   // Confirm if an invoice has been paid using Boar RPC
-  async confirmInvoicePaid(invoice: Invoice): Promise<{ confirmed: boolean; amount: string; error?: string; transaction?: StoredTransaction }> {
+  async confirmInvoicePaid(invoice: Invoice): Promise<{ confirmed: boolean; amount: string; error?: string; shortfall?: string; transaction?: StoredTransaction }> {
     try {
       console.log('🔍 ===== PAYMENT CONFIRMATION DEBUG =====');
       console.log('🔍 Checking payment for invoice:', invoice.id);
@@ -526,7 +526,7 @@ class PaymentMonitorService {
           } else {
             console.log('⚠️ Partial payment received:', totalReceived.toString(), 'Expected:', requestedAmountWei.toString());
             console.log('   Shortfall:', (requestedAmountWei - totalReceived).toString(), 'wei');
-            return { confirmed: false, amount: totalReceived.toString(), error: `Partial payment received. Got ${totalReceived.toString()} wei, need ${requestedAmountWei.toString()} wei` };
+            return { confirmed: false, amount: totalReceived.toString(), error: 'PARTIAL_PAYMENT', shortfall: (requestedAmountWei - totalReceived).toString() };
           }
         }
       } else if (detectedPaymentAmount > 0n) {
@@ -560,7 +560,7 @@ class PaymentMonitorService {
           return { confirmed: true, amount: amountToCheck.toString() };
         } else {
           console.log('⚠️ Partial payment detected. Amount:', amountToCheck.toString(), 'Expected:', requestedAmountWei.toString());
-          return { confirmed: false, amount: amountToCheck.toString(), error: `Partial payment. Got ${amountToCheck.toString()} wei, need ${requestedAmountWei.toString()} wei` };
+          return { confirmed: false, amount: amountToCheck.toString(), error: 'PARTIAL_PAYMENT', shortfall: (requestedAmountWei - amountToCheck).toString() };
         }
       }
       
