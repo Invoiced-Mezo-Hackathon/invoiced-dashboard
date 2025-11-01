@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { X, CheckCircle, XCircle, QrCode, Eye } from 'lucide-react';
+import { X, CheckCircle, XCircle, QrCode, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { InvoiceQRModal } from '@/components/invoice/InvoiceQRModal';
@@ -7,6 +7,7 @@ import { CreateInvoicePanel } from '@/components/invoice/CreateInvoicePanel';
 // import { useInvoicePaymentMonitor } from '@/hooks/usePaymentMonitor';
 import { useInvoiceContract } from '@/hooks/useInvoiceContract';
 import { Invoice as InvoiceType } from '@/types/invoice';
+import { useCountdown } from '@/hooks/useCountdown';
 import toast from 'react-hot-toast';
 
 interface Invoice {
@@ -38,6 +39,8 @@ export function Invoices({ invoices }: InvoicesProps) {
   const [showCancelConfirm, setShowCancelConfirm] = useState<Invoice | null>(null);
   const [bitcoinPrice, setBitcoinPrice] = useState<number>(0);
   const [_isLoadingPrice, _setIsLoadingPrice] = useState<boolean>(false);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -68,7 +71,16 @@ export function Invoices({ invoices }: InvoicesProps) {
     });
     if (statusFilter === 'all') return withDerived;
     return withDerived.filter(inv => inv.status === statusFilter);
-  }, [invoices, statusFilter]);
+  }, [invoices, statusFilter, refreshTrigger]);
+
+  // Periodically refresh to update expired status (every second)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setRefreshTrigger(prev => prev + 1);
+    }, 1000); // Check every second for expired invoices
+
+    return () => clearInterval(interval);
+  }, []);
 
   const handleMarkAsPaid = async () => {
     if (selectedInvoice) {
@@ -101,13 +113,20 @@ export function Invoices({ invoices }: InvoicesProps) {
     setShowQRModal(true);
   };
 
-  const handleShowTransaction = (invoice: Invoice, e: React.MouseEvent) => {
-    e.stopPropagation();
-    const txHash = (invoice as any).paymentTxHash || (invoice as any).txHash;
-    if (txHash) {
-      window.open(`https://explorer.test.mezo.org/tx/${txHash}`, '_blank');
-    } else {
-      toast.error('Transaction hash not available');
+  const handleCopyAddress = async (address: string) => {
+    if (!address.trim()) {
+      toast.error('No address to copy');
+      return;
+    }
+    
+    try {
+      await navigator.clipboard.writeText(address);
+      setCopiedAddress(address);
+      toast.success('Address copied to clipboard!');
+      setTimeout(() => setCopiedAddress(null), 2000);
+    } catch (error) {
+      console.error('Failed to copy address:', error);
+      toast.error('Failed to copy address');
     }
   };
 
@@ -128,7 +147,7 @@ export function Invoices({ invoices }: InvoicesProps) {
       {/* Status Filter */}
       <div className="mb-6">
         <div className="flex flex-wrap gap-2">
-          {(['all', 'pending', 'paid', 'cancelled'] as const).map((status) => (
+          {(['all', 'pending', 'paid', 'cancelled', 'expired'] as const).map((status) => (
             <button
               key={status}
               onClick={() => setStatusFilter(status)}
@@ -152,12 +171,37 @@ export function Invoices({ invoices }: InvoicesProps) {
 
       {/* Invoices Grid */}
       <div className="space-y-4">
-        {filteredInvoices.map((invoice) => (
-          <div
-            key={invoice.id}
-            className="bg-[#2C2C2E]/40 backdrop-blur-xl border border-green-400/10 rounded-xl sm:rounded-2xl p-4 sm:p-5 hover:border-green-400/20 transition-all group active:scale-[0.99] touch-manipulation"
-          >
-            <div className="flex items-start justify-between mb-3 sm:mb-4 gap-2">
+        {filteredInvoices.map((invoice) => {
+          // Use countdown timer for pending invoices
+          const InvoiceCardWithTimer = () => {
+            const countdown = invoice.expiresAt && invoice.status === 'pending' 
+              ? useCountdown(invoice.expiresAt)
+              : null;
+            const [hasNotifiedExpiry, setHasNotifiedExpiry] = useState(false);
+
+            // Auto-update status to expired if countdown expired
+            useEffect(() => {
+              if (countdown?.isExpired && invoice.status === 'pending' && !hasNotifiedExpiry) {
+                // Trigger refresh to update status
+                setRefreshTrigger(prev => prev + 1);
+                // Send notification for expired invoice
+                try {
+                  window.dispatchEvent(new CustomEvent('notify', { 
+                    detail: { 
+                      title: 'Invoice expired', 
+                      message: `Invoice for ${invoice.clientName} has expired` 
+                    } 
+                  }));
+                } catch {}
+                setHasNotifiedExpiry(true);
+              }
+            }, [countdown?.isExpired, invoice.status, invoice.clientName, hasNotifiedExpiry]);
+
+            return (
+              <div
+                className="bg-[#2C2C2E]/40 backdrop-blur-xl border border-green-400/10 rounded-xl sm:rounded-2xl p-4 sm:p-5 hover:border-green-400/20 transition-all group active:scale-[0.99] touch-manipulation"
+              >
+                <div className="flex items-start justify-between mb-3 sm:mb-4 gap-2">
               <div className="flex-1 min-w-0">
                 <h3 className="text-base sm:text-lg font-semibold mb-1 sm:mb-2 group-hover:text-white transition-colors font-navbar text-white truncate">
                   {invoice.clientName}
@@ -173,15 +217,6 @@ export function Invoices({ invoices }: InvoicesProps) {
                 >
                   <QrCode className="w-4 h-4 text-white" />
                 </button>
-                {invoice.status === 'paid' && (
-                  <button
-                    onClick={(e) => handleShowTransaction(invoice, e)}
-                    className="w-8 h-8 rounded-lg border border-green-400/30 bg-green-500/10 hover:bg-green-500/20 transition-all flex items-center justify-center"
-                    title="View Transaction Details"
-                  >
-                    <Eye className="w-4 h-4 text-white" />
-                  </button>
-                )}
                 {invoice.status === 'pending' && (
                   <button
                     onClick={(e) => {
@@ -199,20 +234,63 @@ export function Invoices({ invoices }: InvoicesProps) {
                     "px-3 py-1 rounded-full text-xs font-navbar font-medium border",
                     invoice.status === 'paid' && "bg-green-500/10 text-green-400 border-green-400/20",
                     invoice.status === 'pending' && "bg-yellow-500/10 text-yellow-400 border-yellow-400/20",
-                    invoice.status === 'cancelled' && "bg-red-500/10 text-red-400 border-red-400/20"
+                    invoice.status === 'cancelled' && "bg-red-500/10 text-red-400 border-red-400/20",
+                    invoice.status === 'expired' && "bg-gray-500/10 text-gray-400 border-gray-400/20"
                   )}
                 >
-                  {invoice.status}
-                </span>
+                    {invoice.status}
+                  </span>
+                </div>
               </div>
-            </div>
-            
-            <div className="flex items-center justify-between mb-4">
+              
+              {/* Timer Display for Pending Invoices */}
+              {invoice.status === 'pending' && invoice.expiresAt && (
+                <div className="mb-4 p-3 bg-yellow-500/10 border border-yellow-400/20 rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Clock className="w-4 h-4 text-yellow-400" />
+                      <span className="text-xs font-navbar text-white/60">Time remaining:</span>
+                    </div>
+                    <span className={cn(
+                      "text-sm font-mono font-semibold font-navbar",
+                      countdown?.isExpired 
+                        ? "text-red-400"
+                        : countdown && countdown.hours === 0 && countdown.minutes < 5
+                        ? "text-red-400"
+                        : "text-yellow-400"
+                    )}>
+                      {countdown ? (countdown.isExpired ? 'Expired' : countdown.label) : 'Calculating...'}
+                    </span>
+                  </div>
+                </div>
+              )}
+              
+              {/* Expired Indicator */}
+              {invoice.status === 'expired' && (
+                <div className="mb-4 p-3 bg-red-500/10 border border-red-400/20 rounded-lg">
+                  <div className="flex items-center gap-2">
+                    <XCircle className="w-4 h-4 text-red-400" />
+                    <span className="text-sm font-navbar text-red-400">Invoice expired</span>
+                  </div>
+                </div>
+              )}
+              
+              <div className="flex items-center justify-between mb-4">
               <div>
                 <p className="text-2xl font-bold font-navbar mb-1 text-white">
-                  {invoice.amount.toFixed(8)} BTC
+                  {invoice.currency === 'USD' || invoice.currency === 'KES' 
+                    ? (bitcoinPrice > 0 
+                        ? `$${(invoice.amount * bitcoinPrice).toFixed(2)}`
+                        : `${invoice.amount.toFixed(8)} BTC`)
+                    : `${invoice.amount.toFixed(8)} BTC`}
                 </p>
-                <p className="text-sm font-navbar text-white/60">${invoice.musdAmount.toFixed(2)} USD</p>
+                <p className="text-sm font-navbar text-white/60">
+                  {invoice.currency === 'USD' || invoice.currency === 'KES'
+                    ? `${invoice.amount.toFixed(8)} BTC`
+                    : (bitcoinPrice > 0 
+                        ? `$${(invoice.amount * bitcoinPrice).toFixed(2)} USD`
+                        : 'Loading price...')}
+                </p>
               </div>
               <div className="text-right">
                 <p className="text-xs font-navbar text-white/50 mb-1">Created</p>
@@ -233,9 +311,13 @@ export function Invoices({ invoices }: InvoicesProps) {
               >
                 View Details
               </button>
+              </div>
             </div>
-          </div>
-        ))}
+            );
+          };
+
+          return <InvoiceCardWithTimer key={invoice.id} />;
+        })}
 
         {filteredInvoices.length === 0 && (
           <div className="bg-[#2C2C2E]/40 backdrop-blur-xl border border-green-400/10 rounded-2xl p-12 text-center">
@@ -284,7 +366,23 @@ export function Invoices({ invoices }: InvoicesProps) {
                   <label className="block text-sm font-medium text-white/80 mb-2">Client Code</label>
                   <p className="text-white">{selectedInvoice.clientCode}</p>
                 </div>
-                {selectedInvoice.currency === 'BTC' ? (
+                {(selectedInvoice.currency === 'USD' || selectedInvoice.currency === 'KES') ? (
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-white/80 mb-2">Amount</label>
+                      <p className="text-white">
+                        {bitcoinPrice > 0 
+                          ? `$${(selectedInvoice.amount * bitcoinPrice).toFixed(2)}`
+                          : `$${selectedInvoice.amount.toFixed(2)} (price loading...)`}
+                        {selectedInvoice.currency === 'KES' ? ' KES' : ' USD'}
+                      </p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-white/80 mb-2">Bitcoin Equivalent</label>
+                      <p className="text-white">{selectedInvoice.amount.toFixed(8)} BTC</p>
+                    </div>
+                  </>
+                ) : (
                   <>
                     <div>
                       <label className="block text-sm font-medium text-white/80 mb-2">Amount</label>
@@ -292,18 +390,11 @@ export function Invoices({ invoices }: InvoicesProps) {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-white/80 mb-2">USD Equivalent</label>
-                      <p className="text-white">${(selectedInvoice.amount * (bitcoinPrice || 0)).toFixed(2)} USD</p>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div>
-                      <label className="block text-sm font-medium text-white/80 mb-2">Amount</label>
-                      <p className="text-white">${(selectedInvoice.amount * (bitcoinPrice || 0)).toFixed(2)} USD</p>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-white/80 mb-2">Bitcoin Equivalent</label>
-                      <p className="text-white">{selectedInvoice.amount.toFixed(8)} BTC</p>
+                      <p className="text-white">
+                        {bitcoinPrice > 0 
+                          ? `$${(selectedInvoice.amount * bitcoinPrice).toFixed(2)} USD`
+                          : 'Loading price...'}
+                      </p>
                     </div>
                   </>
                 )}
@@ -341,8 +432,19 @@ export function Invoices({ invoices }: InvoicesProps) {
                       <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-500/20 text-green-400 border border-green-400/30 font-navbar">auto-detected</span>
                     )}
                   </div>
-                  <div className="p-3 bg-white/5 rounded-xl">
-                    <p className="text-white font-mono text-sm break-all">{(selectedInvoice as any).payToAddress || selectedInvoice.bitcoinAddress}</p>
+                  <div className="relative p-3 bg-white/5 rounded-xl">
+                    <p className="text-white font-mono text-sm break-all pr-10">{(selectedInvoice as any).payToAddress || selectedInvoice.bitcoinAddress}</p>
+                    <button
+                      onClick={() => handleCopyAddress((selectedInvoice as any).payToAddress || selectedInvoice.bitcoinAddress || '')}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-white/60 hover:text-green-400 hover:bg-white/10 rounded-lg transition-all duration-200 active:scale-95"
+                      title="Copy address"
+                    >
+                      {copiedAddress === ((selectedInvoice as any).payToAddress || selectedInvoice.bitcoinAddress) ? (
+                        <i className="fa-solid fa-check text-green-400"></i>
+                      ) : (
+                        <i className="fa-solid fa-copy"></i>
+                      )}
+                    </button>
                   </div>
                 </div>
               ) : null}

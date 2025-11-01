@@ -2,15 +2,19 @@ import { useEffect, useMemo, useState } from 'react';
 import type { Invoice } from '@/types/invoice';
 import { transactionStorage } from '@/services/transaction-storage';
 import { MEZO_EXPLORER_URL } from '@/lib/boar-config';
-import { TrendingUp, Calendar, DollarSign, FileText } from 'lucide-react';
+import { TrendingUp, Calendar, DollarSign, FileText, Sparkles } from 'lucide-react';
+import { useAccount } from 'wagmi';
+import { matsRewards } from '@/services/mats-rewards';
 
 interface AnalyticsProps {
   invoices: Invoice[];
 }
 
 export function Analytics({ invoices }: AnalyticsProps) {
+  const { address } = useAccount();
   const [bitcoinPrice, setBitcoinPrice] = useState<number>(0);
   const [version, setVersion] = useState(0);
+  const [totalMats, setTotalMats] = useState(0);
 
   useEffect(() => {
     const fetchBitcoinPrice = async () => {
@@ -37,6 +41,26 @@ export function Analytics({ invoices }: AnalyticsProps) {
     };
   }, []);
 
+  // Fetch MATS total
+  useEffect(() => {
+    const refreshMats = () => {
+      if (address) {
+        setTotalMats(matsRewards.getTotalMats(address));
+      } else {
+        setTotalMats(0);
+      }
+    };
+    
+    refreshMats();
+    const interval = setInterval(refreshMats, 5000); // Refresh every 5 seconds
+    window.addEventListener('matsUpdated', refreshMats);
+    
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('matsUpdated', refreshMats);
+    };
+  }, [address]);
+
   const paidInvoices = useMemo(() => invoices.filter(i => i.status === 'paid'), [invoices]);
   const pendingInvoices = useMemo(() => invoices.filter(i => i.status === 'pending'), [invoices]);
 
@@ -49,7 +73,7 @@ export function Analytics({ invoices }: AnalyticsProps) {
         if (observed && observed !== '0' && observed !== '') {
           amountBtc = Number(BigInt(observed)) / Math.pow(10, 18);
         } else {
-          const txs = transactionStorage.getTransactionsForInvoice(inv.id);
+          const txs = address ? transactionStorage.getTransactionsForInvoice(address, inv.id) : [];
           const latest = txs[0];
           if (latest?.amount) {
             amountBtc = Number(BigInt(latest.amount)) / Math.pow(10, 18);
@@ -115,7 +139,7 @@ export function Analytics({ invoices }: AnalyticsProps) {
         if (observed && observed !== '0' && observed !== '') {
           amountBtc = Number(BigInt(observed)) / Math.pow(10, 18);
         } else {
-          const txs = transactionStorage.getTransactionsForInvoice(inv.id);
+          const txs = address ? transactionStorage.getTransactionsForInvoice(address, inv.id) : [];
           const latest = txs[0];
           if (latest?.amount) {
             amountBtc = Number(BigInt(latest.amount)) / Math.pow(10, 18);
@@ -183,7 +207,7 @@ export function Analytics({ invoices }: AnalyticsProps) {
       </div>
 
       {/* Key Metrics */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4 mb-8">
         <div className="bg-[#2C2C2E]/40 backdrop-blur-xl border border-green-400/10 rounded-xl sm:rounded-2xl p-3 sm:p-4 active:scale-[0.98] touch-manipulation">
           <div className="flex items-center gap-2 mb-2">
             <DollarSign className="w-4 h-4 text-green-400" />
@@ -215,6 +239,14 @@ export function Analytics({ invoices }: AnalyticsProps) {
           </div>
           <p className="text-sm font-bold font-navbar text-white">{lastPaymentAt ? new Date(lastPaymentAt).toLocaleDateString() : '—'}</p>
           <p className="text-xs font-navbar text-white/50">{lastPaymentAt ? new Date(lastPaymentAt).toLocaleTimeString() : 'No payments'}</p>
+        </div>
+        <div className="bg-[#2C2C2E]/40 backdrop-blur-xl border border-purple-400/10 rounded-xl sm:rounded-2xl p-3 sm:p-4 active:scale-[0.98] touch-manipulation">
+          <div className="flex items-center gap-2 mb-2">
+            <Sparkles className="w-4 h-4 text-purple-400" />
+            <p className="text-xs font-navbar text-white/60">MATS Rewards</p>
+          </div>
+          <p className="text-xl font-bold font-navbar text-white">{totalMats.toLocaleString()}</p>
+          <p className="text-xs font-navbar text-white/50">{address ? 'From Vault & Market' : 'Connect wallet'}</p>
         </div>
       </div>
 

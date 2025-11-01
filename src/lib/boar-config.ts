@@ -48,6 +48,7 @@ export interface AddressSubscription {
   address: string;
   invoiceId: string;
   expectedAmount?: string; // Expected payment amount in wei
+  creator?: string; // Wallet address that created the invoice (for scoped storage)
 }
 
 // Error handling

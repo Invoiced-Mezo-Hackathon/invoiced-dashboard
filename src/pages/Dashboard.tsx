@@ -1,11 +1,12 @@
 import { useState, useEffect, useMemo } from 'react';
-import { TrendingUp, Clock, Vault, Activity, DollarSign, Users, FileText } from 'lucide-react';
+import { TrendingUp, Clock, Vault, Activity, DollarSign, Users, FileText, Sparkles } from 'lucide-react';
 import type { Invoice, InvoiceStats as InvoiceStatsType } from '@/types/invoice';
 import { useAccount, useWatchContractEvent } from 'wagmi';
 import { MEZO_CONTRACTS, INVOICE_CONTRACT_ABI, BORROW_MANAGER_ABI } from '@/lib/mezo';
 import { useMezoVault } from '@/hooks/useMezoVault';
 import { paymentMonitor, PaymentEvent } from '@/services/payment-monitor';
 import { transactionStorage } from '@/services/transaction-storage';
+import { matsRewards } from '@/services/mats-rewards';
 
 type InvoiceStats = InvoiceStatsType;
 
@@ -16,11 +17,12 @@ interface DashboardProps {
 }
 
 export function Dashboard({ onNavigate, invoices, stats }: DashboardProps) {
-  const { address: _address, isConnected: _isConnected } = useAccount();
+  const { address, isConnected: _isConnected } = useAccount();
   const { refetchAll: refetchVault } = useMezoVault();
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [bitcoinPrice, setBitcoinPrice] = useState<number>(0);
   const [isLoadingPrice, setIsLoadingPrice] = useState(true);
+  const [totalMats, setTotalMats] = useState(0);
 
   // Watch invoice events for real-time updates
   useWatchContractEvent({
@@ -179,7 +181,7 @@ export function Dashboard({ onNavigate, invoices, stats }: DashboardProps) {
         }
         
         // Priority 2: Try transaction amount (same as Payments page)
-        const transactions = transactionStorage.getTransactionsForInvoice(invoice.id);
+        const transactions = address ? transactionStorage.getTransactionsForInvoice(address, invoice.id) : [];
         const latestTransaction = transactions[0];
         if (latestTransaction?.amount) {
           amountBtc = Number(BigInt(latestTransaction.amount)) / Math.pow(10, 18);
@@ -205,7 +207,20 @@ export function Dashboard({ onNavigate, invoices, stats }: DashboardProps) {
   }, [totalRevenueBTC, bitcoinPrice]);
 
   const activeInvoices = useMemo(() => {
-    return stats?.activeInvoices ?? invoices.filter(invoice => invoice.status === 'pending').length;
+    // Use stats if available, otherwise calculate locally - only count truly pending (exclude cancelled and expired)
+    if (stats?.activeInvoices !== undefined) {
+      return stats.activeInvoices;
+    }
+    const now = Date.now();
+    return invoices.filter(invoice => {
+      if (invoice.status !== 'pending') return false;
+      // Check if invoice has expired
+      if (invoice.expiresAt) {
+        const isExpired = new Date(invoice.expiresAt).getTime() <= now;
+        if (isExpired) return false; // Don't count expired as pending
+      }
+      return true; // Only count if status is pending and not expired
+    }).length;
   }, [invoices, stats?.activeInvoices]);
 
   const totalInvoices = useMemo(() => {
@@ -224,6 +239,26 @@ export function Dashboard({ onNavigate, invoices, stats }: DashboardProps) {
     if (totalInvoices === 0) return 0;
     return Math.round((paidInvoicesCount / totalInvoices) * 100);
   }, [paidInvoicesCount, totalInvoices]);
+
+  // Fetch MATS total
+  useEffect(() => {
+    const refreshMats = () => {
+      if (address) {
+        setTotalMats(matsRewards.getTotalMats(address));
+      } else {
+        setTotalMats(0);
+      }
+    };
+    
+    refreshMats();
+    const interval = setInterval(refreshMats, 5000); // Refresh every 5 seconds
+    window.addEventListener('matsUpdated', refreshMats);
+    
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('matsUpdated', refreshMats);
+    };
+  }, [address]);
 
   const statsData = [
     {
@@ -258,6 +293,14 @@ export function Dashboard({ onNavigate, invoices, stats }: DashboardProps) {
       icon: TrendingUp,
       color: 'text-orange-400',
       bgColor: 'bg-orange-500/10',
+    },
+    {
+      label: 'MATS Rewards',
+      value: totalMats.toLocaleString(),
+      change: address ? 'From Vault & Market' : 'Connect wallet',
+      icon: Sparkles,
+      color: 'text-purple-400',
+      bgColor: 'bg-purple-500/10',
     },
   ];
 
@@ -353,7 +396,7 @@ export function Dashboard({ onNavigate, invoices, stats }: DashboardProps) {
         {/* Stats Overview */}
         <div className="mb-8">
           <h2 className="text-lg font-semibold mb-4 font-navbar text-white/90">Business Overview</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
             {statsData.map((stat) => (
               <div key={stat.label} className="bg-[#2C2C2E]/40 backdrop-blur-xl border border-green-400/10 rounded-xl sm:rounded-2xl p-3 sm:p-4 hover:border-green-400/20 transition-all active:scale-[0.98] touch-manipulation">
                 <div className="flex items-center gap-2 sm:gap-3 mb-2 sm:mb-3">

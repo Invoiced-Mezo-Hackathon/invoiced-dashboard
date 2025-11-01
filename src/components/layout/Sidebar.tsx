@@ -13,6 +13,7 @@ const navItems = [
   { id: 'invoices', iconClass: 'fa-solid fa-file-invoice', label: 'Invoices' },
   { id: 'payments', iconClass: 'fa-solid fa-sack-dollar', label: 'Payments' },
   { id: 'vault', iconClass: 'fa-solid fa-lock', label: 'Vault' },
+  { id: 'market', iconClass: 'fa-solid fa-store', label: 'Market' },
   { id: 'settings', iconClass: 'fa-solid fa-gear', label: 'Settings' },
 ];
 

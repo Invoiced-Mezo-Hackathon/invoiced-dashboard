@@ -43,6 +43,7 @@ export interface Invoice {
   requestedAmount: string; // Amount in wei (10^18 base unit), stored as string
   observedInboundAmount?: string; // Actual amount received
   balanceAtCreation?: string; // Snapshot from Boar at creation time
+  bitcoinPriceAtCreation?: number; // Bitcoin price (USD) at invoice creation time
 }
 
 export interface InvoiceFormData {
@@ -53,6 +54,8 @@ export interface InvoiceFormData {
   bitcoinAddress: string;
   payToAddress: string; // Address for payment
   balanceAtCreation?: string; // Balance snapshot at creation time
+  bitcoinPriceAtCreation?: number; // Bitcoin price at creation time (for metadata)
+  originalUsdAmount?: number; // Original USD amount (for USD invoices)
 }
 
 export interface InvoiceStats {

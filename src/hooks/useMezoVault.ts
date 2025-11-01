@@ -603,13 +603,27 @@ export const useMezoVault = () => {
       // Convert amount to wei
       const amountInWei = MezoUtils.parseAmount(amount);
       
-      // Pre-validate against max withdrawable when in debt
+      // Pre-validate against max withdrawable when in debt (use cached value if available, don't block)
       const currentBorrowed = borrowedAmountData ? (borrowedAmountData as bigint) : 0n;
       if (currentBorrowed > 0n) {
         try {
-          const { data: latestMax } = await refetchMaxWithdrawable();
-          const maxAllowed = (latestMax ?? maxWithdrawableData ?? 0n) as bigint;
-          if (amountInWei > maxAllowed) {
+          // Use cached maxWithdrawableData first, only refetch if not available (non-blocking)
+          let maxAllowed = (maxWithdrawableData ?? 0n) as bigint;
+          if (maxAllowed === 0n) {
+            // Try to get latest value with timeout - don't wait too long
+            try {
+              const { data: latestMax } = await Promise.race([
+                refetchMaxWithdrawable(),
+                new Promise(resolve => setTimeout(() => resolve({ data: null }), 500)) // Max 500ms wait
+              ]) as any;
+              maxAllowed = (latestMax ?? 0n) as bigint;
+            } catch (refetchErr) {
+              // Use cached value or proceed with validation
+              console.warn('Max withdrawable refetch timed out, using cached value');
+            }
+          }
+          
+          if (maxAllowed > 0n && amountInWei > maxAllowed) {
             setIsLoading(false);
             const maxStr = MezoUtils.formatAmount(maxAllowed);
             const msg = `Amount exceeds max withdrawable while in debt. Max now: ${maxStr} BTC`;
@@ -835,34 +849,29 @@ export const useMezoVault = () => {
       const amount = pendingRepayAmount;
       setPendingRepayAmount(null);
       
-      // Refresh allowance first, then trigger repay
+      // Trigger repay immediately after approval - no delays
       const triggerRepay = async () => {
         try {
-          await refetchMusdAllowance();
-          // Small delay to ensure blockchain state is updated
-          await new Promise(resolve => setTimeout(resolve, 1500));
-          
-          // Re-check allowance after refresh
-          await refetchMusdAllowance();
-          
-          // Now trigger the repay - using the repayMUSD function directly
           if (!address || !isConnected) {
             throw new MezoError('Wallet not connected', MEZO_ERRORS.NETWORK_ERROR);
           }
 
+          // Prepare transaction parameters immediately
           const amountInWei = MezoUtils.parseAmount(amount);
-          console.log('🔄 Auto-repaying after approval:', { 
-            amount, 
-            amountInWei: amountInWei.toString(),
-            vaultAddress: MEZO_CONTRACTS.MEZO_VAULT,
-            userAddress: address
-          });
           
           // Validate contract address
           if (!MEZO_CONTRACTS.MEZO_VAULT) {
             throw new MezoError('Invalid vault contract address', MEZO_ERRORS.NETWORK_ERROR);
           }
           
+          console.log('🔄 Auto-repaying after approval (immediate):', { 
+            amount, 
+            amountInWei: amountInWei.toString(),
+            vaultAddress: MEZO_CONTRACTS.MEZO_VAULT,
+            userAddress: address
+          });
+          
+          // Trigger wallet popup immediately - allowance check happens in parallel
           repayMUSDWrite({
             address: MEZO_CONTRACTS.MEZO_VAULT as `0x${string}`,
             abi: BORROW_MANAGER_ABI,
@@ -870,7 +879,12 @@ export const useMezoVault = () => {
             args: [amountInWei]
           });
           
-          console.log('✅ Auto-repay writeContract called - wallet popup should appear now');
+          console.log('✅ Auto-repay writeContract called - wallet popup should appear immediately');
+          
+          // Refresh allowance in background (non-blocking)
+          refetchMusdAllowance().catch(err => {
+            console.warn('Allowance refetch failed (non-critical):', err);
+          });
         } catch (err) {
           console.error('❌ Auto-repay after approval failed:', err);
           setIsLoading(false);

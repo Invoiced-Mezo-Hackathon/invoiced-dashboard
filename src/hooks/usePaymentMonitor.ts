@@ -43,7 +43,8 @@ export function usePaymentMonitor(): PaymentMonitorState & PaymentMonitorActions
         
         setState(prev => ({
           ...prev,
-          recentTransactions: transactionStorage.getRecentTransactions(),
+          // Note: getRecentTransactions requires address - will be handled per wallet
+          recentTransactions: [],
         }));
       },
 
@@ -52,7 +53,8 @@ export function usePaymentMonitor(): PaymentMonitorState & PaymentMonitorActions
         
         setState(prev => ({
           ...prev,
-          recentTransactions: transactionStorage.getRecentTransactions(),
+          // Note: getRecentTransactions requires address - will be handled per wallet
+          recentTransactions: [],
         }));
       },
 
@@ -141,8 +143,9 @@ export function usePaymentMonitor(): PaymentMonitorState & PaymentMonitorActions
   }, []);
 
   // Get transactions for a specific invoice
-  const getTransactionsForInvoice = useCallback((invoiceId: string): StoredTransaction[] => {
-    return transactionStorage.getTransactionsForInvoice(invoiceId);
+  const getTransactionsForInvoice = useCallback((address: string | null | undefined, invoiceId: string): StoredTransaction[] => {
+    if (!address) return [];
+    return transactionStorage.getTransactionsForInvoice(address, invoiceId);
   }, []);
 
   // Clear error state

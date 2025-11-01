@@ -189,10 +189,13 @@ class PaymentMonitorService {
         detectedAt: Date.now(), // number, not string
       };
       
-      transactionStorage.addTransaction(storedTransaction);
-      
-      // Automatically mark invoice as paid
-      invoiceStorage.markAsPaid(subscription.invoiceId, transaction.value, transaction.hash);
+      // Add transaction with creator address for scoped storage
+      if (subscription.creator) {
+        transactionStorage.addTransaction(subscription.creator, storedTransaction);
+        
+        // Automatically mark invoice as paid (scoped by creator wallet)
+        invoiceStorage.markAsPaid(subscription.creator, subscription.invoiceId, transaction.value, transaction.hash);
+      }
       
       // Unsubscribe from this address since payment is complete
       this.unsubscribeFromAddress(subscription.address);
@@ -203,19 +206,11 @@ class PaymentMonitorService {
   }
 
   // Handle new block notifications
-  private handleBlock(blockData: unknown): void {
-    // Update confirmation counts for pending transactions
-    const pendingTransactions = transactionStorage.getAllTransactions()
-      .filter(tx => tx.status === 'pending');
-    
-    pendingTransactions.forEach(tx => {
-      const confirmations = (blockData as { number: number }).number - tx.blockNumber + 1;
-      transactionStorage.updateTransactionConfirmations(tx.txHash, confirmations);
-      
-      if (confirmations >= 1) {
-        this.notifyPaymentConfirmed(tx.invoiceId, tx);
-      }
-    });
+  // Note: This method cannot update transactions without knowing the creator address
+  // Transactions are updated individually when detected, not in bulk here
+  private handleBlock(_blockData: unknown): void {
+    // Block handling is currently disabled because we need wallet addresses to update transactions
+    // Individual transactions are updated when detected in handleTransaction
   }
 
   // Handle error messages
@@ -609,12 +604,18 @@ class PaymentMonitorService {
   }
 
   // Check and update expired invoices
-  checkExpiredInvoices(): void {
-    const expiredInvoices = invoiceStorage.getExpiredInvoices();
+  // Note: This method requires wallet address - should be called from useInvoiceContract with address
+  // This method is kept for backward compatibility but may not work correctly without address
+  checkExpiredInvoices(walletAddress?: string): void {
+    if (!walletAddress) {
+      console.warn('⚠️ checkExpiredInvoices called without wallet address - skipping');
+      return;
+    }
+    const expiredInvoices = invoiceStorage.getExpiredInvoices(walletAddress);
     
     expiredInvoices.forEach(invoice => {
       console.log('⏰ Marking invoice as expired:', invoice.id);
-      invoiceStorage.markAsExpired(invoice.id);
+      invoiceStorage.markAsExpired(walletAddress, invoice.id);
       
       // Unsubscribe from monitoring this address
       if (invoice.payToAddress) {
